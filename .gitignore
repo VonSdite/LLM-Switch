@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.vsix
+.DS_Store
+.env
+.env.*
+!.env.example
+.vscode-test/
+out/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

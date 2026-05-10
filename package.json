@@ -1,0 +1,77 @@
+{
+  "name": "llm-switch",
+  "displayName": "LLM-Switch",
+  "description": "Unified AI provider and agent model configuration manager for Claude, Codex, and opencode.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:llm-switch.openManager",
+    "onCommand:llm-switch.openClaudeConfig",
+    "onCommand:llm-switch.openCodexConfig",
+    "onCommand:llm-switch.openOpencodeConfig"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "LLM-Switch",
+      "properties": {
+        "llmSwitch.claude.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Claude settings.json path. Leave empty to use the platform default."
+        },
+        "llmSwitch.codex.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Codex config.toml path. Leave empty to use the platform default."
+        },
+        "llmSwitch.opencode.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "opencode opencode.json path. Leave empty to use the platform default."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "llm-switch.openManager",
+        "title": "LLM-Switch: Open Manager"
+      },
+      {
+        "command": "llm-switch.openClaudeConfig",
+        "title": "LLM-Switch: Open Claude Config"
+      },
+      {
+        "command": "llm-switch.openCodexConfig",
+        "title": "LLM-Switch: Open Codex Config"
+      },
+      {
+        "command": "llm-switch.openOpencodeConfig",
+        "title": "LLM-Switch: Open opencode Config"
+      }
+    ]
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/vscode": "^1.118.0",
+    "typescript": "^6.0.3"
+  }
+}
