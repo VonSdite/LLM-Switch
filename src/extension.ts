@@ -259,7 +259,7 @@ async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: Ag
   const currentModel = currentAgentModelLabel(agent, agentState, providers);
   const selected = await vscode.window.showQuickPick(items, {
     title: `LLM-Switch: 快速切换 ${agentLabel} 模型`,
-    placeHolder: `当前模型：${currentModel}`,
+    placeHolder: currentModel,
     matchOnDescription: true,
     matchOnDetail: true
   });
@@ -331,22 +331,21 @@ function currentAgentModelLabel(agent: AgentName, agentState: ClaudeAgentState |
     const claude = agentState as ClaudeAgentState;
     const currentModels = uniqueNonEmpty(CLAUDE_MODEL_KEYS.map((key) => claude.models[key]));
     if (!currentModels.length) {
-      return providerName ? `${providerName} / 未配置` : '未配置';
+      return `当前模型：${providerName ? `${providerName} / ` : ''}未配置`;
     }
     if (currentModels.length === 1) {
-      return providerName ? `${providerName} / ${currentModels[0]}` : currentModels[0];
+      return `当前模型：${providerName ? `${providerName} / ` : ''}${currentModels[0]}`;
     }
-    const suffix = currentModels.length > 3 ? '...' : '';
-    return `多个模型：${currentModels.slice(0, 3).join(', ')}${suffix}`;
+    return `当前 Claude 模型不一致：${summarizeModelCounts(CLAUDE_MODEL_KEYS.map((key) => claude.models[key]))}。选择后会统一写入 5 个模型环境变量。`;
   }
   if (agent === 'codex') {
     const codex = agentState as CodexAgentState;
     const owner = providerName || codex.modelProvider;
-    return codex.model ? (owner ? `${owner} / ${codex.model}` : codex.model) : '未配置';
+    return codex.model ? `当前模型：${owner ? `${owner} / ` : ''}${codex.model}` : '当前模型：未配置';
   }
   const opencode = agentState as OpencodeAgentState;
   const owner = providerName || opencode.providerKey;
-  return opencode.model ? (owner ? `${owner} / ${opencode.model}` : opencode.model) : '未配置';
+  return opencode.model ? `当前模型：${owner ? `${owner} / ` : ''}${opencode.model}` : '当前模型：未配置';
 }
 
 function currentProviderName(providerId: string, providers: ProviderConfig[]): string {
@@ -355,6 +354,17 @@ function currentProviderName(providerId: string, providers: ProviderConfig[]): s
 
 function uniqueNonEmpty(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function summarizeModelCounts(values: string[]): string {
+  const counts = new Map<string, number>();
+  values.forEach((value) => {
+    const model = value.trim() || '未配置';
+    counts.set(model, (counts.get(model) ?? 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .map(([model, count]) => `${model} x${count}`)
+    .join('，');
 }
 
 function agentDisplayName(agent: AgentName): string {
