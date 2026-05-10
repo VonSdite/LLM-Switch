@@ -485,13 +485,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
     }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      justify-content: flex-end;
-    }
     .path-editor {
       display: grid;
       gap: 9px;
@@ -565,10 +558,22 @@ export function getManagerHtml(webview: vscode.Webview): string {
       color: var(--vscode-foreground);
       font-weight: 650;
     }
+    .change-heading {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
     .change-provider {
       color: var(--vscode-descriptionForeground);
       font-size: 12px;
       font-weight: 400;
+    }
+    .change-action {
+      display: flex;
+      justify-content: flex-end;
+      flex-shrink: 0;
     }
     .change-list {
       display: grid;
@@ -1268,8 +1273,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 modelSelect('claudeModel_' + key, provider, selectedModels[key], disabled, true) +
               '</div>';
             }).join('') + '</div>' +
-            '<div class="actions"><button data-action="save-claude" ' + (disabled ? 'disabled' : '') + '>应用到 Claude</button></div>' +
-            renderClaudeChangePreview(agent, provider, selectedModels) +
+            renderClaudeChangePreview(agent, provider, selectedModels, disabled) +
           '</div>' +
         '</section>';
       }
@@ -1294,8 +1298,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           '<div class="form">' +
             '<h3 class="section-title">Codex 模型</h3>' +
             field('model', modelSelect('codexModel', provider, selectedModel, disabled)) +
-            '<div class="actions"><button data-action="save-codex" ' + (disabled ? 'disabled' : '') + '>应用到 Codex</button></div>' +
-            renderCodexChangePreview(agent, provider, selectedModel) +
+            renderCodexChangePreview(agent, provider, selectedModel, disabled) +
           '</div>' +
         '</section>';
       }
@@ -1319,8 +1322,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           '<div class="form">' +
             '<h3 class="section-title">opencode 模型</h3>' +
             field('model', modelSelect('opencodeModel', provider, selectedModel, disabled)) +
-            '<div class="actions"><button data-action="save-opencode" ' + (disabled ? 'disabled' : '') + '>应用到 opencode</button></div>' +
-            renderOpencodeChangePreview(agent, provider, selectedModel) +
+            renderOpencodeChangePreview(agent, provider, selectedModel, disabled) +
           '</div>' +
         '</section>';
       }
@@ -1655,7 +1657,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return provider && provider.models.length ? provider.models[0] : '';
       }
 
-      function renderClaudeChangePreview(agent, provider, selectedModels) {
+      function renderClaudeChangePreview(agent, provider, selectedModels, disabled) {
         if (!provider) {
           return '';
         }
@@ -1666,10 +1668,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return [key, valueLabel(agent.models[key]), valueLabel(selectedModels[key])];
         }));
 
-        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows);
+        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-claude', '保存到 Claude', disabled));
       }
 
-      function renderCodexChangePreview(agent, provider, selectedModel) {
+      function renderCodexChangePreview(agent, provider, selectedModel, disabled) {
         if (!provider) {
           return '';
         }
@@ -1685,10 +1687,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
           ['auth.json.OPENAI_API_KEY', secretLabel(agent.hasOpenAiApiKey), secretLabel(provider.apiKey)]
         ];
 
-        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows);
+        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-codex', '保存到 Codex', disabled));
       }
 
-      function renderOpencodeChangePreview(agent, provider, selectedModel) {
+      function renderOpencodeChangePreview(agent, provider, selectedModel, disabled) {
         if (!provider) {
           return '';
         }
@@ -1706,12 +1708,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
           [providerKey + '.models', hasCurrentBlock ? countLabel(agent.providerModelCount) : '未配置', countLabel(nextModelCount)]
         ];
 
-        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows);
+        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-opencode', '保存到 opencode', disabled));
       }
 
-      function renderChangePreview(title, suffix, rows) {
+      function renderChangePreview(title, suffix, rows, actionHtml) {
         return '<div class="summary">' +
-          '<div class="change-title"><span>' + h(title) + '</span><span class="change-provider">' + h(suffix) + '</span></div>' +
+          '<div class="change-title">' +
+            '<span class="change-heading"><span>' + h(title) + '</span><span class="change-provider">' + h(suffix) + '</span></span>' +
+            (actionHtml ? '<span class="change-action">' + actionHtml + '</span>' : '') +
+          '</div>' +
           '<div class="change-list">' + rows.map(function (row) {
             const key = row[0];
             const before = row[1];
@@ -1726,6 +1731,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
             '</div>';
           }).join('') + '</div>' +
         '</div>';
+      }
+
+      function saveButton(action, label, disabled) {
+        return '<button data-action="' + attr(action) + '" ' + (disabled ? 'disabled' : '') + '>' + h(label) + '</button>';
       }
 
       function valueLabel(value) {
