@@ -17,6 +17,13 @@ interface WebviewMessage {
   payload?: unknown;
 }
 
+interface FetchProviderModelsPayload {
+  apiKey: string;
+  claudeBaseUrl: string;
+  codexBaseUrl: string;
+  opencodeBaseUrl: string;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const manager = new LlmSwitchManager(context);
 
@@ -137,6 +144,11 @@ class LlmSwitchManager {
           await openConfigPathInEditor(this.context, configPathTargetFromPayload(message.payload));
           await this.postState(webview);
           return;
+        case 'fetchProviderModels': {
+          const result = await fetchProviderModels(fetchProviderModelsPayload(message.payload));
+          await webview.postMessage({ type: 'providerModelsFetched', ...result });
+          return;
+        }
         default:
           return;
       }
@@ -235,4 +247,122 @@ function stringArrayField(value: unknown, key: string): string[] {
   const record = asRecord(value);
   const raw = record[key];
   return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function fetchProviderModelsPayload(payload: unknown): FetchProviderModelsPayload {
+  const record = asRecord(payload);
+  return {
+    apiKey: stringField(record, 'apiKey'),
+    claudeBaseUrl: stringField(record, 'claudeBaseUrl'),
+    codexBaseUrl: stringField(record, 'codexBaseUrl'),
+    opencodeBaseUrl: stringField(record, 'opencodeBaseUrl')
+  };
+}
+
+async function fetchProviderModels(payload: FetchProviderModelsPayload): Promise<{ models: string[]; sourceUrl: string }> {
+  const baseUrl = inferModelApiBaseUrl(payload);
+  const candidates = ['/v1/models', '/models'].map((suffix) => joinUrl(baseUrl, suffix));
+  const errors: string[] = [];
+
+  for (const url of candidates) {
+    try {
+      const models = await fetchModelsFromUrl(url, payload.apiKey);
+      if (models.length > 0) {
+        return { models, sourceUrl: url };
+      }
+      errors.push(`${url}: 未返回模型列表`);
+    } catch (error) {
+      errors.push(`${url}: ${errorMessage(error)}`);
+    }
+  }
+
+  throw new Error(`拉取模型失败，已尝试 /v1/models 和 /models。${errors.join('；')}`);
+}
+
+function inferModelApiBaseUrl(payload: FetchProviderModelsPayload): string {
+  const raw = [payload.codexBaseUrl, payload.opencodeBaseUrl, payload.claudeBaseUrl]
+    .map((value) => value.trim())
+    .find(Boolean);
+  if (!raw) {
+    throw new Error('请先填写至少一个 Agent API 地址。');
+  }
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`API 地址无效：${raw}`);
+  }
+
+  url.search = '';
+  url.hash = '';
+  url.pathname = url.pathname.replace(/\/+$/g, '');
+  if (url.pathname === '/v1' || url.pathname.endsWith('/v1')) {
+    url.pathname = url.pathname.slice(0, -3) || '/';
+  }
+  url.pathname = url.pathname.replace(/\/+$/g, '');
+  return url.toString().replace(/\/+$/g, '');
+}
+
+function joinUrl(baseUrl: string, suffix: string): string {
+  return `${baseUrl.replace(/\/+$/g, '')}/${suffix.replace(/^\/+/g, '')}`;
+}
+
+async function fetchModelsFromUrl(url: string, apiKey: string): Promise<string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const headers: Record<string, string> = {
+      accept: 'application/json'
+    };
+    if (apiKey.trim()) {
+      headers.authorization = `Bearer ${apiKey.trim()}`;
+    }
+
+    const response = await fetch(url, {
+      headers,
+      signal: controller.signal
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}${text ? ` ${text.slice(0, 160)}` : ''}`);
+    }
+
+    let json: unknown;
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error('响应不是有效 JSON');
+    }
+    return extractModelNames(json);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractModelNames(value: unknown): string[] {
+  const root = asRecord(value);
+  const candidates = Array.isArray(value)
+    ? value
+    : Array.isArray(root.data)
+      ? root.data
+      : Array.isArray(root.models)
+        ? root.models
+        : [];
+  const names = candidates.map((item) => {
+    if (typeof item === 'string') {
+      return item.trim();
+    }
+    const record = asRecord(item);
+    return stringValue(record.id).trim() || stringValue(record.name).trim() || stringValue(record.model).trim();
+  }).filter(Boolean);
+  return Array.from(new Set(names)).sort((left, right) => left.localeCompare(right));
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

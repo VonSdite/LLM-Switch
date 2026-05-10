@@ -442,6 +442,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
       font-weight: 650;
       color: var(--vscode-foreground);
     }
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -617,6 +623,67 @@ export function getManagerHtml(webview: vscode.Webview): string {
       width: auto;
       min-height: auto;
     }
+    .model-picker-backdrop {
+      z-index: 30;
+    }
+    .model-picker-modal {
+      width: 960px;
+    }
+    .model-picker-body {
+      gap: 10px;
+    }
+    .model-picker-intro {
+      margin: 0;
+      color: var(--vscode-descriptionForeground);
+    }
+    .model-picker-meta {
+      color: var(--vscode-descriptionForeground);
+      font-weight: 650;
+    }
+    .model-picker-list {
+      min-height: 260px;
+      max-height: min(48vh, 520px);
+      overflow: auto;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 6px;
+      background: var(--vscode-editor-background);
+    }
+    .fetched-model-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 44px;
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .fetched-model-row:last-child {
+      border-bottom: 0;
+    }
+    .fetched-model-row:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .fetched-model-row input {
+      width: auto;
+      min-height: auto;
+    }
+    .fetched-model-name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-weight: 650;
+    }
+    .fetched-model-badge {
+      border: 1px solid var(--vscode-badge-background);
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: var(--vscode-badge-foreground);
+      background: var(--vscode-badge-background);
+      font-size: 12px;
+    }
+    .fetched-model-empty {
+      padding: 18px;
+      color: var(--vscode-descriptionForeground);
+    }
     @media (max-width: 760px) {
       .grid,
       .model-row,
@@ -681,6 +748,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
         opencodeModel: null
       };
       let providerModal = null;
+      let modelPicker = null;
+      let modelFetchBusy = false;
       let deleteConfirmId = null;
       let draggedProviderId = null;
       let dragOverProviderId = null;
@@ -694,7 +763,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
           }
           render();
         }
+        if (message.type === 'providerModelsFetched') {
+          modelFetchBusy = false;
+          openModelPicker(message.models || [], message.sourceUrl || '');
+          render();
+        }
         if (message.type === 'error') {
+          modelFetchBusy = false;
+          render();
           return;
         }
       });
@@ -708,6 +784,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (action === 'tab') {
           activeTab = button.getAttribute('data-tab') || 'providers';
           providerModal = null;
+          modelPicker = null;
           render();
         }
         if (action === 'agent-tab') {
@@ -727,13 +804,26 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (action === 'provider-modal-close') {
           providerModal = null;
+          modelPicker = null;
+          modelFetchBusy = false;
           render();
         }
         if (action === 'provider-save') {
           saveProviderFromModal();
         }
+        if (action === 'provider-model-fetch') {
+          fetchProviderModelsFromModal();
+        }
         if (action === 'provider-api-key-toggle') {
           toggleProviderApiKey(button);
+        }
+        if (action === 'model-picker-close') {
+          updateProviderModalDraftFromForm();
+          modelPicker = null;
+          render();
+        }
+        if (action === 'model-picker-apply') {
+          applyModelPickerSelection();
         }
         if (action === 'provider-delete') {
           const id = button.getAttribute('data-provider-id');
@@ -773,7 +863,21 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       document.addEventListener('change', function (event) {
         const target = event.target;
-        if (!target || !target.id) {
+        if (!target) {
+          return;
+        }
+        if (target.id === 'modelPickerSelectAll') {
+          setVisibleModelPickerSelection(target.checked);
+          return;
+        }
+        if (target.dataset && target.dataset.modelPickerModel) {
+          if (modelPicker) {
+            modelPicker.selected[target.dataset.modelPickerModel] = target.checked;
+            updateModelPickerDom();
+          }
+          return;
+        }
+        if (!target.id) {
           return;
         }
         if (target.id === 'claudeProviderSelect') {
@@ -812,6 +916,13 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
       });
 
+      document.addEventListener('input', function (event) {
+        const target = event.target;
+        if (target && target.id === 'modelPickerSearch') {
+          updateModelPickerDom();
+        }
+      });
+
       document.addEventListener('focusout', function (event) {
         const target = event.target;
         if (target && target.dataset && target.dataset.configPathTarget) {
@@ -820,8 +931,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
       });
 
       document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && modelPicker) {
+          updateProviderModalDraftFromForm();
+          modelPicker = null;
+          render();
+          return;
+        }
         if (event.key === 'Escape' && providerModal) {
           providerModal = null;
+          modelFetchBusy = false;
           render();
         }
         const target = event.target;
@@ -894,7 +1012,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return;
         }
         const content = activeTab === 'providers' ? renderProviders() : renderAgents();
-        app.innerHTML = content + renderProviderModal();
+        app.innerHTML = content + renderProviderModal() + renderModelPickerModal();
       }
 
       function renderTabs() {
@@ -1000,13 +1118,57 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 '<label class="checkbox-line"><span>SSL 证书校验</span><input id="providerSslCheck" type="checkbox" ' + (selected.sslCheck ? 'checked' : '') + '></label>' +
               '</div>' +
               '<div class="section">' +
-                '<h3 class="section-title">模型列表</h3>' +
+                '<div class="section-title-row"><h3 class="section-title">模型列表</h3><button type="button" class="secondary" data-action="provider-model-fetch" ' + (modelFetchBusy ? 'disabled' : '') + '>' + (modelFetchBusy ? '拉取中...' : '拉取模型') + '</button></div>' +
                 '<textarea id="providerModels" placeholder="每行一个模型，例如&#10;glm-5&#10;gpt-5.5">' + h(selected.models.join('\\n')) + '</textarea>' +
               '</div>' +
             '</div>' +
             '<footer class="modal-foot">' +
               '<button class="secondary" data-action="provider-modal-close">取消</button>' +
               '<button data-action="provider-save">保存</button>' +
+            '</footer>' +
+          '</section>' +
+        '</div>';
+      }
+
+      function renderModelPickerModal() {
+        if (!modelPicker) {
+          return '';
+        }
+        const query = String(modelPicker.query || '').toLocaleLowerCase();
+        const visibleModels = modelPicker.models.filter(function (model) { return model.toLocaleLowerCase().indexOf(query) >= 0; });
+        const selectedCount = modelPicker.models.filter(function (model) { return modelPicker.selected[model]; }).length;
+        const existingCount = modelPicker.models.filter(function (model) { return modelPicker.existing[model]; }).length;
+        const allVisibleSelected = visibleModels.length > 0 && visibleModels.every(function (model) { return modelPicker.selected[model]; });
+
+        return '<div class="modal-backdrop model-picker-backdrop" role="presentation">' +
+          '<section class="modal model-picker-modal" role="dialog" aria-modal="true" aria-label="选择拉取模型">' +
+            '<header class="modal-head">' +
+              '<h2>选择拉取模型</h2>' +
+              '<button class="ghost icon-button" data-action="model-picker-close" title="关闭" aria-label="关闭">×</button>' +
+            '</header>' +
+            '<div class="modal-body model-picker-body">' +
+              '<p class="model-picker-intro">根据当前模型列表自动标记已有模型。取消勾选可以从当前清单移除；未出现在本次拉取结果中的现有模型会保留。</p>' +
+              '<input id="modelPickerSearch" value="' + attr(modelPicker.query || '') + '" placeholder="搜索" autocomplete="off">' +
+              '<div id="modelPickerMeta" class="model-picker-meta">' + renderModelPickerMeta(modelPicker.models.length, selectedCount, existingCount) + '</div>' +
+              '<div class="model-picker-list">' +
+                '<div class="fetched-model-row">' +
+                  '<input id="modelPickerSelectAll" type="checkbox" ' + (allVisibleSelected ? 'checked' : '') + (visibleModels.length === 0 ? ' disabled' : '') + '>' +
+                  '<strong>模型名称</strong>' +
+                  '<span></span>' +
+                '</div>' +
+                (modelPicker.models.length ? modelPicker.models.map(function (model) {
+                  const visible = model.toLocaleLowerCase().indexOf(query) >= 0;
+                  return '<div class="fetched-model-row" data-fetched-model-row="1" data-model-name="' + attr(model) + '" ' + (visible ? '' : 'hidden') + '>' +
+                    '<input type="checkbox" data-model-picker-model="' + attr(model) + '" ' + (modelPicker.selected[model] ? 'checked' : '') + '>' +
+                    '<span class="fetched-model-name">' + h(model) + '</span>' +
+                    (modelPicker.existing[model] ? '<span class="fetched-model-badge">已在清单</span>' : '<span></span>') +
+                  '</div>';
+                }).join('') : '<div class="fetched-model-empty">没有拉取到模型。</div>') +
+              '</div>' +
+            '</div>' +
+            '<footer class="modal-foot">' +
+              '<button class="secondary" data-action="model-picker-close">取消</button>' +
+              '<button data-action="model-picker-apply">加入当前清单</button>' +
             '</footer>' +
           '</section>' +
         '</div>';
@@ -1117,6 +1279,132 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function openProviderModal(id) {
         const existing = state.providers.find(function (provider) { return provider.id === id; });
         providerModal = existing ? copyProvider(existing) : emptyProvider();
+        modelPicker = null;
+        modelFetchBusy = false;
+        render();
+      }
+
+      function updateProviderModalDraftFromForm() {
+        if (!providerModal || !document.getElementById('providerName')) {
+          return;
+        }
+        const payload = collectProviderForm();
+        providerModal = Object.assign({}, providerModal, payload, {
+          id: providerModal.id || payload.id || ''
+        });
+      }
+
+      function fetchProviderModelsFromModal() {
+        if (!providerModal || modelFetchBusy) {
+          return;
+        }
+        const payload = collectProviderForm();
+        if (!payload.claudeBaseUrl.trim() && !payload.codexBaseUrl.trim() && !payload.opencodeBaseUrl.trim()) {
+          toast('error', '请先填写至少一个 Agent API 地址。');
+          return;
+        }
+        updateProviderModalDraftFromForm();
+        modelFetchBusy = true;
+        modelPicker = null;
+        render();
+        post('fetchProviderModels', {
+          apiKey: payload.apiKey,
+          claudeBaseUrl: payload.claudeBaseUrl,
+          codexBaseUrl: payload.codexBaseUrl,
+          opencodeBaseUrl: payload.opencodeBaseUrl
+        });
+      }
+
+      function openModelPicker(models, sourceUrl) {
+        if (!providerModal) {
+          return;
+        }
+        updateProviderModalDraftFromForm();
+        const fetched = dedupeModels(models);
+        const existingModels = dedupeModels(providerModal.models || []);
+        const existing = {};
+        existingModels.forEach(function (model) { existing[model] = true; });
+        const selected = {};
+        fetched.forEach(function (model) { selected[model] = Boolean(existing[model]); });
+        modelPicker = {
+          models: fetched,
+          sourceUrl: sourceUrl,
+          selected: selected,
+          existing: existing,
+          query: ''
+        };
+      }
+
+      function setVisibleModelPickerSelection(checked) {
+        if (!modelPicker) {
+          return;
+        }
+        const query = value('modelPickerSearch').trim().toLocaleLowerCase();
+        modelPicker.models.forEach(function (model) {
+          if (model.toLocaleLowerCase().indexOf(query) >= 0) {
+            modelPicker.selected[model] = checked;
+          }
+        });
+        updateModelPickerDom();
+      }
+
+      function updateModelPickerDom() {
+        if (!modelPicker) {
+          return;
+        }
+        const query = value('modelPickerSearch').trim().toLocaleLowerCase();
+        modelPicker.query = query;
+        let visibleCount = 0;
+        let visibleSelectedCount = 0;
+
+        document.querySelectorAll('[data-fetched-model-row]').forEach(function (row) {
+          const model = row.getAttribute('data-model-name') || '';
+          const visible = model.toLocaleLowerCase().indexOf(query) >= 0;
+          row.hidden = !visible;
+          const checkbox = row.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+            checkbox.checked = Boolean(modelPicker.selected[model]);
+          }
+          if (visible) {
+            visibleCount += 1;
+            if (modelPicker.selected[model]) {
+              visibleSelectedCount += 1;
+            }
+          }
+        });
+
+        const selectedCount = modelPicker.models.filter(function (model) { return modelPicker.selected[model]; }).length;
+        const existingCount = modelPicker.models.filter(function (model) { return modelPicker.existing[model]; }).length;
+        const meta = document.getElementById('modelPickerMeta');
+        if (meta) {
+          meta.textContent = renderModelPickerMeta(modelPicker.models.length, selectedCount, existingCount);
+        }
+        const selectAll = document.getElementById('modelPickerSelectAll');
+        if (selectAll) {
+          selectAll.disabled = visibleCount === 0;
+          selectAll.checked = visibleCount > 0 && visibleSelectedCount === visibleCount;
+          selectAll.indeterminate = visibleSelectedCount > 0 && visibleSelectedCount < visibleCount;
+        }
+      }
+
+      function applyModelPickerSelection() {
+        if (!modelPicker) {
+          return;
+        }
+        const textarea = document.getElementById('providerModels');
+        if (!textarea) {
+          modelPicker = null;
+          render();
+          return;
+        }
+        const currentModels = parseModelText(textarea.value);
+        const fetchedMap = {};
+        modelPicker.models.forEach(function (model) { fetchedMap[model] = true; });
+        const retainedModels = currentModels.filter(function (model) { return !fetchedMap[model]; });
+        const selectedModels = modelPicker.models.filter(function (model) { return modelPicker.selected[model]; });
+        textarea.value = dedupeModels(retainedModels.concat(selectedModels)).join('\\n');
+        updateProviderModalDraftFromForm();
+        modelPicker = null;
         render();
       }
 
@@ -1151,6 +1439,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return;
         }
         providerModal = null;
+        modelPicker = null;
+        modelFetchBusy = false;
         render();
         post('saveProvider', payload);
       }
@@ -1163,12 +1453,33 @@ export function getManagerHtml(webview: vscode.Webview): string {
           proxyMode: value('providerProxyMode'),
           customProxyUrl: value('providerProxyMode') === 'custom' ? value('providerCustomProxyUrl') : '',
           sslCheck: checked('providerSslCheck'),
-          models: value('providerModels').split(/[\\n,]+/).map(function (item) { return item.trim(); }).filter(Boolean),
+          models: parseModelText(value('providerModels')),
           claudeBaseUrl: value('providerClaudeBaseUrl'),
           codexBaseUrl: value('providerCodexBaseUrl'),
           codexWireApi: value('providerCodexWireApi'),
           opencodeBaseUrl: value('providerOpencodeBaseUrl')
         };
+      }
+
+      function parseModelText(text) {
+        return dedupeModels(String(text || '').split(/[\\n,]+/).map(function (item) { return item.trim(); }).filter(Boolean));
+      }
+
+      function dedupeModels(models) {
+        const seen = {};
+        const result = [];
+        (models || []).forEach(function (model) {
+          const name = String(model || '').trim();
+          if (name && !seen[name]) {
+            seen[name] = true;
+            result.push(name);
+          }
+        });
+        return result;
+      }
+
+      function renderModelPickerMeta(total, selected, existing) {
+        return '共拉取 ' + total + ' 个模型，已选 ' + selected + ' 个，其中 ' + existing + ' 个已在当前清单';
       }
 
       function reorderProviders(sourceId, targetId) {
