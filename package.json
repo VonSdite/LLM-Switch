@@ -2,9 +2,10 @@
   "name": "llm-switch",
   "displayName": "LLM-Switch",
   "description": "Unified AI provider and agent model configuration manager for Claude, Codex, and opencode.",
-  "version": "1.0.0",
-  "publisher": "local",
+  "version": "1.0.1",
+  "publisher": "VonSdite",
   "license": "MIT",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VonSdite/LLM-Switch.git"
