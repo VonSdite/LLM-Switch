@@ -1168,7 +1168,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
             '</div>' +
             '<footer class="modal-foot">' +
               '<button class="secondary" data-action="model-picker-close">取消</button>' +
-              '<button data-action="model-picker-apply">加入当前清单</button>' +
+              '<button data-action="model-picker-apply">确认</button>' +
             '</footer>' +
           '</section>' +
         '</div>';
@@ -1404,7 +1404,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         modelPicker.models.forEach(function (model) { fetchedMap[model] = true; });
         const retainedModels = currentModels.filter(function (model) { return !fetchedMap[model]; });
         const selectedModels = modelPicker.models.filter(function (model) { return modelPicker.selected[model]; });
-        textarea.value = dedupeModels(retainedModels.concat(selectedModels)).join('\\n');
+        textarea.value = normalizeModels(retainedModels.concat(selectedModels)).join('\\n');
         updateProviderModalDraftFromForm();
         modelPicker = null;
         render();
@@ -1464,7 +1464,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function parseModelText(text) {
-        return dedupeModels(String(text || '').split(/[\\n,]+/).map(function (item) { return item.trim(); }).filter(Boolean));
+        return normalizeModels(String(text || '').split(/[\\n,]+/).map(function (item) { return item.trim(); }).filter(Boolean));
       }
 
       function dedupeModels(models) {
@@ -1478,6 +1478,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
           }
         });
         return result;
+      }
+
+      function normalizeModels(models) {
+        return dedupeModels(models).sort(function (left, right) {
+          return left.localeCompare(right);
+        });
       }
 
       function renderModelPickerMeta(total, selected, existing) {
