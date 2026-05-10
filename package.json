@@ -5,6 +5,10 @@
   "version": "1.0.0",
   "publisher": "local",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VonSdite/LLM-Switch.git"
+  },
   "type": "commonjs",
   "engines": {
     "vscode": "^1.80.0"
