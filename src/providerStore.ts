@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { CodexWireApi, ProviderConfig, ProxyMode } from './types';
 
 const PROVIDERS_KEY = 'providers';
+const DEFAULT_OPENCODE_NPM = '@ai-sdk/openai-compatible';
 const PROVIDER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const PROVIDER_NAME_ERROR = 'Provider 名称只能包含英文字母、数字、下划线和中划线，长度 1-64，且必须以字母或数字开头。';
 
@@ -18,6 +19,7 @@ interface ProviderInput {
   codexBaseUrl?: string;
   codexWireApi?: CodexWireApi;
   opencodeBaseUrl?: string;
+  opencodeNpm?: string;
 }
 
 export function loadProviders(context: vscode.ExtensionContext): ProviderConfig[] {
@@ -50,7 +52,8 @@ export function loadProviders(context: vscode.ExtensionContext): ProviderConfig[
       claudeBaseUrl: stringValue(raw.claudeBaseUrl),
       codexBaseUrl: stringValue(raw.codexBaseUrl),
       codexWireApi: normalizeWireApi(raw.codexWireApi),
-      opencodeBaseUrl: stringValue(raw.opencodeBaseUrl)
+      opencodeBaseUrl: stringValue(raw.opencodeBaseUrl),
+      opencodeNpm: normalizeOpencodeNpm(raw.opencodeNpm)
     });
   }
   return providers;
@@ -93,7 +96,8 @@ export async function upsertProvider(context: vscode.ExtensionContext, input: Pr
     claudeBaseUrl: stringValue(input.claudeBaseUrl).trim(),
     codexBaseUrl: stringValue(input.codexBaseUrl).trim(),
     codexWireApi: normalizeWireApi(input.codexWireApi),
-    opencodeBaseUrl: stringValue(input.opencodeBaseUrl).trim()
+    opencodeBaseUrl: stringValue(input.opencodeBaseUrl).trim(),
+    opencodeNpm: normalizeOpencodeNpm(input.opencodeNpm)
   };
 
   if (existingIndex >= 0) {
@@ -199,6 +203,11 @@ function normalizeProxyMode(value: unknown): ProxyMode {
 
 function normalizeWireApi(value: unknown): CodexWireApi {
   return value === 'chat' ? 'chat' : 'responses';
+}
+
+function normalizeOpencodeNpm(value: unknown): string {
+  const text = stringValue(value).trim();
+  return text || DEFAULT_OPENCODE_NPM;
 }
 
 function stringValue(value: unknown): string {

@@ -25,6 +25,7 @@ export interface ProviderConfig {
   codexBaseUrl: string;
   codexWireApi: CodexWireApi;
   opencodeBaseUrl: string;
+  opencodeNpm: string;
 }
 
 export interface AgentConfigFileState {

@@ -125,7 +125,7 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
   }
 
   providerRoot[provider.key] = {
-    npm: '@ai-sdk/openai-compatible',
+    npm: provider.opencodeNpm,
     name: provider.name,
     options,
     models

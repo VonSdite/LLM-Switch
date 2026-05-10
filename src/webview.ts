@@ -468,6 +468,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
       display: grid;
       gap: 8px;
     }
+    .stack-field {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
     .section-title {
       margin: 0;
       font-size: 13px;
@@ -785,6 +790,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         'ANTHROPIC_MODEL',
         'ANTHROPIC_REASONING_MODEL'
       ];
+      const defaultOpencodeNpm = '@ai-sdk/openai-compatible';
       const restored = vscode.getState() || {};
       const providerNameRule = '只允许英文字母、数字、下划线和中划线，长度 1-64，且必须以字母或数字开头。名称需唯一。';
       let activeTab = restored.activeTab || 'providers';
@@ -965,6 +971,13 @@ export function getManagerHtml(webview: vscode.Webview): string {
             field.hidden = target.value !== 'custom';
           }
         }
+        if (target.id === 'providerOpencodeNpm') {
+          const field = document.getElementById('opencodeCustomNpmField');
+          if (field) {
+            field.style.display = target.value === 'custom' ? '' : 'none';
+            field.hidden = target.value !== 'custom';
+          }
+        }
       });
 
       document.addEventListener('input', function (event) {
@@ -1136,6 +1149,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return '';
         }
         const selected = providerModal;
+        const selectedOpencodeNpm = selected.opencodeNpm || defaultOpencodeNpm;
         return '<div class="modal-backdrop" role="presentation">' +
           '<section class="modal" role="dialog" aria-modal="true" aria-label="' + h(selected.id ? '编辑 Provider' : '新增 Provider') + '">' +
             '<header class="modal-head">' +
@@ -1157,7 +1171,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
                   field('Codex API 地址', '<input id="providerCodexBaseUrl" value="' + attr(selected.codexBaseUrl) + '" placeholder="http://host:port/v1">') +
                   field('Codex wire_api', select('providerCodexWireApi', [['responses', 'responses'], ['chat', 'chat']], selected.codexWireApi)) +
                 '</div>' +
-                field('opencode API 地址', '<input id="providerOpencodeBaseUrl" value="' + attr(selected.opencodeBaseUrl) + '" placeholder="http://host:port/v1">') +
+                '<div class="grid">' +
+                  field('opencode API 地址', '<input id="providerOpencodeBaseUrl" value="' + attr(selected.opencodeBaseUrl) + '" placeholder="http://host:port/v1">') +
+                  '<div class="stack-field">' +
+                    field('opencode npm', select('providerOpencodeNpm', opencodeNpmOptions(), opencodeNpmSelection(selectedOpencodeNpm))) +
+                    '<div id="opencodeCustomNpmField" ' + (isBuiltinOpencodeNpm(selectedOpencodeNpm) ? 'hidden' : '') + '>' +
+                      field('自定义 npm 包', '<input id="providerOpencodeCustomNpm" value="' + attr(isBuiltinOpencodeNpm(selectedOpencodeNpm) ? '' : selectedOpencodeNpm) + '" placeholder="@ai-sdk/provider-name">') +
+                    '</div>' +
+                  '</div>' +
+                '</div>' +
               '</div>' +
               '<div class="section">' +
                 '<div class="grid">' +
@@ -1491,6 +1513,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
           toast('error', '自定义代理模式需要填写代理地址。');
           return;
         }
+        if (value('providerOpencodeNpm') === 'custom' && !payload.opencodeNpm.trim()) {
+          toast('error', '自定义 opencode npm 包名必填。');
+          return;
+        }
         providerModal = null;
         modelPicker = null;
         modelFetchBusy = false;
@@ -1499,6 +1525,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function collectProviderForm() {
+        const opencodeNpmSelectionValue = value('providerOpencodeNpm');
         return {
           id: providerModal && providerModal.id ? providerModal.id : undefined,
           name: value('providerName'),
@@ -1510,7 +1537,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
           claudeBaseUrl: value('providerClaudeBaseUrl'),
           codexBaseUrl: value('providerCodexBaseUrl'),
           codexWireApi: value('providerCodexWireApi'),
-          opencodeBaseUrl: value('providerOpencodeBaseUrl')
+          opencodeBaseUrl: value('providerOpencodeBaseUrl'),
+          opencodeNpm: opencodeNpmSelectionValue === 'custom' ? value('providerOpencodeCustomNpm') : opencodeNpmSelectionValue
         };
       }
 
@@ -1701,7 +1729,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const nextModelCount = !selectedModel ? provider.models.length : provider.models.indexOf(selectedModel) >= 0 ? provider.models.length : provider.models.length + 1;
         const rows = [
           ['model', valueLabel(currentModel), valueLabel(nextModel)],
-          [providerKey + '.npm', hasCurrentBlock ? valueLabel(agent.providerNpm) : '未配置', '@ai-sdk/openai-compatible'],
+          [providerKey + '.npm', hasCurrentBlock ? valueLabel(agent.providerNpm) : '未配置', valueLabel(provider.opencodeNpm)],
           [providerKey + '.name', hasCurrentBlock ? valueLabel(agent.providerName) : '未配置', valueLabel(provider.name)],
           [providerKey + '.options.baseURL', hasCurrentBlock ? valueLabel(agent.providerBaseUrl) : '未配置', valueLabel(provider.opencodeBaseUrl)],
           [providerKey + '.options.apiKey', hasCurrentBlock ? valueLabel(agent.providerApiKey) : '未配置', valueLabel(provider.apiKey)],
@@ -1750,6 +1778,22 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function tomlPathKey(value) {
         const text = String(value || '');
         return /^[A-Za-z0-9_-]+$/.test(text) ? text : JSON.stringify(text);
+      }
+
+      function opencodeNpmOptions() {
+        return [
+          ['@ai-sdk/openai-compatible', '@ai-sdk/openai-compatible'],
+          ['@ai-sdk/openai', '@ai-sdk/openai'],
+          ['custom', '自定义']
+        ];
+      }
+
+      function opencodeNpmSelection(value) {
+        return isBuiltinOpencodeNpm(value) ? value : 'custom';
+      }
+
+      function isBuiltinOpencodeNpm(value) {
+        return value === '@ai-sdk/openai-compatible' || value === '@ai-sdk/openai';
       }
 
       function modelSelect(id, provider, current, disabled, allowUnset) {
@@ -1824,7 +1868,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
           claudeBaseUrl: '',
           codexBaseUrl: '',
           codexWireApi: 'responses',
-          opencodeBaseUrl: ''
+          opencodeBaseUrl: '',
+          opencodeNpm: defaultOpencodeNpm
         };
       }
 
@@ -1841,7 +1886,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
           claudeBaseUrl: provider.claudeBaseUrl,
           codexBaseUrl: provider.codexBaseUrl,
           codexWireApi: provider.codexWireApi,
-          opencodeBaseUrl: provider.opencodeBaseUrl
+          opencodeBaseUrl: provider.opencodeBaseUrl,
+          opencodeNpm: provider.opencodeNpm || defaultOpencodeNpm
         };
       }
 
