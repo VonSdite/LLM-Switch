@@ -17,6 +17,7 @@ import {
 } from './types';
 
 type JsonObject = Record<string, unknown>;
+const MAX_BACKUP_FILES = 5;
 
 export async function readAgentsState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<AgentsState> {
   const [claude, codex, opencode] = await Promise.all([
@@ -349,7 +350,34 @@ async function readTextIfExists(filePath: string): Promise<string> {
 }
 
 async function writeText(filePath: string, text: string): Promise<void> {
+  const existed = await fileExists(filePath);
+  const currentText = existed ? await fs.readFile(filePath, 'utf8') : '';
+  if (currentText === text) {
+    return;
+  }
+  if (existed) {
+    await createConfigBackup(filePath);
+  }
   await fs.writeFile(filePath, text, 'utf8');
+}
+
+async function createConfigBackup(filePath: string): Promise<void> {
+  for (let index = MAX_BACKUP_FILES; index >= 1; index -= 1) {
+    const backupPath = backupFilePath(filePath, index);
+    if (!(await fileExists(backupPath))) {
+      continue;
+    }
+    if (index === MAX_BACKUP_FILES) {
+      await fs.unlink(backupPath);
+    } else {
+      await fs.rename(backupPath, backupFilePath(filePath, index + 1));
+    }
+  }
+  await fs.copyFile(filePath, backupFilePath(filePath, 1));
+}
+
+function backupFilePath(filePath: string, index: number): string {
+  return `${filePath}.bak.${index}`;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
