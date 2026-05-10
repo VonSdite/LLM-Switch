@@ -1663,7 +1663,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         const rows = [
           ['ANTHROPIC_BASE_URL', valueLabel(agent.baseUrl), valueLabel(provider.claudeBaseUrl)],
-          ['ANTHROPIC_AUTH_TOKEN', secretLabel(agent.hasAuthToken), secretLabel(provider.apiKey)]
+          ['ANTHROPIC_AUTH_TOKEN', valueLabel(agent.authToken), valueLabel(provider.apiKey)]
         ].concat(claudeKeys.map(function (key) {
           return [key, valueLabel(agent.models[key]), valueLabel(selectedModels[key])];
         }));
@@ -1684,7 +1684,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           [providerKey + '.name', hasCurrentBlock ? valueLabel(agent.providerName) : '未配置', valueLabel(provider.name)],
           [providerKey + '.base_url', hasCurrentBlock ? valueLabel(agent.providerBaseUrl) : '未配置', valueLabel(provider.codexBaseUrl)],
           [providerKey + '.wire_api', hasCurrentBlock ? valueLabel(agent.wireApi) : '未配置', valueLabel(provider.codexWireApi)],
-          ['auth.json.OPENAI_API_KEY', secretLabel(agent.hasOpenAiApiKey), secretLabel(provider.apiKey)]
+          ['auth.json.OPENAI_API_KEY', valueLabel(agent.openAiApiKey), valueLabel(provider.apiKey)]
         ];
 
         return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-codex', disabled));
@@ -1704,7 +1704,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           [providerKey + '.npm', hasCurrentBlock ? valueLabel(agent.providerNpm) : '未配置', '@ai-sdk/openai-compatible'],
           [providerKey + '.name', hasCurrentBlock ? valueLabel(agent.providerName) : '未配置', valueLabel(provider.name)],
           [providerKey + '.options.baseURL', hasCurrentBlock ? valueLabel(agent.providerBaseUrl) : '未配置', valueLabel(provider.opencodeBaseUrl)],
-          [providerKey + '.options.apiKey', hasCurrentBlock ? secretLabel(agent.hasProviderApiKey) : '未配置', secretLabel(provider.apiKey)],
+          [providerKey + '.options.apiKey', hasCurrentBlock ? valueLabel(agent.providerApiKey) : '未配置', valueLabel(provider.apiKey)],
           [providerKey + '.models', hasCurrentBlock ? countLabel(agent.providerModelCount) : '未配置', countLabel(nextModelCount)]
         ];
 
@@ -1740,10 +1740,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function valueLabel(value) {
         const text = String(value || '').trim();
         return text ? text : '未配置';
-      }
-
-      function secretLabel(value) {
-        return value ? '已设置' : '未配置';
       }
 
       function countLabel(value) {

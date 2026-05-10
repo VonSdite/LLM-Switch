@@ -145,6 +145,7 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
     exists,
     selectedProviderId: '',
     baseUrl: '',
+    authToken: '',
     hasAuthToken: false,
     models: emptyClaudeModels()
   };
@@ -153,12 +154,14 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
     const config = await readJsonConfig(filePath, { env: {} });
     const env = objectValue(config.env);
     const baseUrl = stringValue(env.ANTHROPIC_BASE_URL);
+    const authToken = stringValue(env.ANTHROPIC_AUTH_TOKEN);
     const matched = providers.find((provider) => provider.claudeBaseUrl && sameUrl(provider.claudeBaseUrl, baseUrl));
     return {
       ...baseState,
       selectedProviderId: matched?.id ?? '',
       baseUrl,
-      hasAuthToken: Boolean(stringValue(env.ANTHROPIC_AUTH_TOKEN)),
+      authToken,
+      hasAuthToken: Boolean(authToken),
       models: Object.fromEntries(
         CLAUDE_MODEL_KEYS.map((key) => [key, stringValue(env[key])])
       ) as ClaudeAgentState['models']
@@ -191,6 +194,7 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
       path: authPathInfo.path,
       exists: authExists
     },
+    openAiApiKey: '',
     hasOpenAiApiKey: false,
     model: ''
   };
@@ -204,6 +208,7 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
     const providerBaseUrl = stringValue(providerBlock.base_url);
     const wireApi = stringValue(providerBlock.wire_api);
     const auth = await readJsonConfig(authPathInfo.path, {});
+    const openAiApiKey = stringValue(auth.OPENAI_API_KEY);
     const matched = providers.find((provider) => {
       if (!provider.codexBaseUrl) {
         return false;
@@ -218,7 +223,8 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
       providerName,
       providerBaseUrl,
       wireApi,
-      hasOpenAiApiKey: Boolean(stringValue(auth.OPENAI_API_KEY)),
+      openAiApiKey,
+      hasOpenAiApiKey: Boolean(openAiApiKey),
       model
     };
   } catch (error) {
@@ -242,6 +248,7 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
     providerName: '',
     providerNpm: '',
     providerBaseUrl: '',
+    providerApiKey: '',
     hasProviderApiKey: false,
     providerModelCount: 0,
     model: ''
@@ -256,6 +263,7 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
     const providerBlock = objectValue(objectValue(config.provider)[providerKey]);
     const providerOptions = objectValue(providerBlock.options);
     const providerBaseUrl = stringValue(providerOptions.baseURL);
+    const providerApiKey = stringValue(providerOptions.apiKey);
     const providerModels = objectValue(providerBlock.models);
     const matched = providers.find((provider) => {
       if (!provider.opencodeBaseUrl) {
@@ -271,7 +279,8 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
       providerName: stringValue(providerBlock.name),
       providerNpm: stringValue(providerBlock.npm),
       providerBaseUrl,
-      hasProviderApiKey: Boolean(stringValue(providerOptions.apiKey)),
+      providerApiKey,
+      hasProviderApiKey: Boolean(providerApiKey),
       providerModelCount: Object.keys(providerModels).length,
       model
     };

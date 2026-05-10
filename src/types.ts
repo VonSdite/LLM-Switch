@@ -39,6 +39,7 @@ export interface AgentConfigFileState {
 export interface ClaudeAgentState extends AgentConfigFileState {
   selectedProviderId: string;
   baseUrl: string;
+  authToken: string;
   hasAuthToken: boolean;
   models: Record<ClaudeModelKey, string>;
 }
@@ -50,6 +51,7 @@ export interface CodexAgentState extends AgentConfigFileState {
   providerBaseUrl: string;
   wireApi: string;
   auth: AgentConfigFileState;
+  openAiApiKey: string;
   hasOpenAiApiKey: boolean;
   model: string;
 }
@@ -60,6 +62,7 @@ export interface OpencodeAgentState extends AgentConfigFileState {
   providerName: string;
   providerNpm: string;
   providerBaseUrl: string;
+  providerApiKey: string;
   hasProviderApiKey: boolean;
   providerModelCount: number;
   model: string;
