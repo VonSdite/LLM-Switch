@@ -1668,7 +1668,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return [key, valueLabel(agent.models[key]), valueLabel(selectedModels[key])];
         }));
 
-        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-claude', '保存到 Claude', disabled));
+        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-claude', disabled));
       }
 
       function renderCodexChangePreview(agent, provider, selectedModel, disabled) {
@@ -1687,7 +1687,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           ['auth.json.OPENAI_API_KEY', secretLabel(agent.hasOpenAiApiKey), secretLabel(provider.apiKey)]
         ];
 
-        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-codex', '保存到 Codex', disabled));
+        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-codex', disabled));
       }
 
       function renderOpencodeChangePreview(agent, provider, selectedModel, disabled) {
@@ -1708,7 +1708,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           [providerKey + '.models', hasCurrentBlock ? countLabel(agent.providerModelCount) : '未配置', countLabel(nextModelCount)]
         ];
 
-        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-opencode', '保存到 opencode', disabled));
+        return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-opencode', disabled));
       }
 
       function renderChangePreview(title, suffix, rows, actionHtml) {
@@ -1733,8 +1733,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
         '</div>';
       }
 
-      function saveButton(action, label, disabled) {
-        return '<button data-action="' + attr(action) + '" ' + (disabled ? 'disabled' : '') + '>' + h(label) + '</button>';
+      function saveButton(action, disabled) {
+        return '<button data-action="' + attr(action) + '" ' + (disabled ? 'disabled' : '') + '>保存</button>';
       }
 
       function valueLabel(value) {
