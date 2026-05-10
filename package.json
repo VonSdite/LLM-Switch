@@ -16,7 +16,10 @@
     "onCommand:llm-switch.openManager",
     "onCommand:llm-switch.openClaudeConfig",
     "onCommand:llm-switch.openCodexConfig",
-    "onCommand:llm-switch.openOpencodeConfig"
+    "onCommand:llm-switch.openOpencodeConfig",
+    "onCommand:llm-switch.quickSwitchClaudeModel",
+    "onCommand:llm-switch.quickSwitchCodexModel",
+    "onCommand:llm-switch.quickSwitchOpencodeModel"
   ],
   "main": "./dist/extension.js",
   "scripts": {
@@ -42,6 +45,18 @@
       {
         "command": "llm-switch.openOpencodeConfig",
         "title": "LLM-Switch: Open opencode Config"
+      },
+      {
+        "command": "llm-switch.quickSwitchClaudeModel",
+        "title": "LLM-Switch: Quick Switch Claude Model"
+      },
+      {
+        "command": "llm-switch.quickSwitchCodexModel",
+        "title": "LLM-Switch: Quick Switch Codex Model"
+      },
+      {
+        "command": "llm-switch.quickSwitchOpencodeModel",
+        "title": "LLM-Switch: Quick Switch opencode Model"
       }
     ]
   },

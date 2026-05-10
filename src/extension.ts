@@ -13,7 +13,7 @@ import {
 import { ConfigPathTarget, resetAgentConfigPath, setAgentConfigPath } from './configPaths';
 import { deleteProvider, loadProviders, reorderProviders, upsertProvider } from './providerStore';
 import { getManagerHtml } from './webview';
-import { AgentName, WebviewState } from './types';
+import { AgentName, CLAUDE_MODEL_KEYS, ClaudeAgentState, CodexAgentState, OpencodeAgentState, ProviderConfig, WebviewState } from './types';
 
 interface WebviewMessage {
   type: string;
@@ -35,6 +35,11 @@ interface ModelRequestOptions {
   customProxyUrl: string;
 }
 
+interface ModelQuickPickItem extends vscode.QuickPickItem {
+  providerId: string;
+  model: string;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const manager = new LlmSwitchManager(context);
 
@@ -42,7 +47,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('llm-switch.openManager', () => manager.openPanel()),
     vscode.commands.registerCommand('llm-switch.openClaudeConfig', () => openConfigInEditor(context, 'claude')),
     vscode.commands.registerCommand('llm-switch.openCodexConfig', () => openConfigInEditor(context, 'codex')),
-    vscode.commands.registerCommand('llm-switch.openOpencodeConfig', () => openConfigInEditor(context, 'opencode'))
+    vscode.commands.registerCommand('llm-switch.openOpencodeConfig', () => openConfigInEditor(context, 'opencode')),
+    vscode.commands.registerCommand('llm-switch.quickSwitchClaudeModel', () => manager.quickSwitchModel('claude')),
+    vscode.commands.registerCommand('llm-switch.quickSwitchCodexModel', () => manager.quickSwitchModel('codex')),
+    vscode.commands.registerCommand('llm-switch.quickSwitchOpencodeModel', () => manager.quickSwitchModel('opencode'))
   );
 }
 
@@ -55,6 +63,17 @@ class LlmSwitchManager {
   private panel: vscode.WebviewPanel | undefined;
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
+
+  public async quickSwitchModel(agent: AgentName): Promise<void> {
+    try {
+      const changed = await quickSwitchAgentModel(this.context, agent);
+      if (changed) {
+        await this.broadcastState();
+      }
+    } catch (error) {
+      await vscode.window.showErrorMessage(`LLM-Switch: ${errorMessage(error)}`);
+    }
+  }
 
   public async openPanel(): Promise<void> {
     if (this.panel) {
@@ -220,6 +239,132 @@ async function openConfigPathInEditor(context: vscode.ExtensionContext, target: 
   const filePath = await openConfigPath(context, target);
   const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
   await vscode.window.showTextDocument(document, { preview: false });
+}
+
+async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: AgentName): Promise<boolean> {
+  const providers = loadProviders(context);
+  const agents = await readAgentsState(context, providers);
+  const agentState = agents[agent];
+  const agentLabel = agentDisplayName(agent);
+  if (agentState.parseError) {
+    throw new Error(`${agentLabel} 配置读取失败：${agentState.parseError}`);
+  }
+
+  const items = modelQuickPickItems(agent, providers, agentState);
+  if (!items.length) {
+    await vscode.window.showWarningMessage(`LLM-Switch: 没有可用于 ${agentLabel} 的 Provider 模型，请先在 Providers 配置对应 API 地址和模型列表。`);
+    return false;
+  }
+
+  const currentModel = currentAgentModelLabel(agent, agentState, providers);
+  const selected = await vscode.window.showQuickPick(items, {
+    title: `LLM-Switch: 快速切换 ${agentLabel} 模型`,
+    placeHolder: `当前模型：${currentModel}`,
+    matchOnDescription: true,
+    matchOnDetail: true
+  });
+  if (!selected) {
+    return false;
+  }
+
+  if (agent === 'claude') {
+    const models = Object.fromEntries(CLAUDE_MODEL_KEYS.map((key) => [key, selected.model])) as Record<typeof CLAUDE_MODEL_KEYS[number], string>;
+    await saveClaudeConfig(context, providers, { providerId: selected.providerId, models });
+    return true;
+  }
+  if (agent === 'codex') {
+    await saveCodexConfig(context, providers, { providerId: selected.providerId, model: selected.model });
+    return true;
+  }
+  await saveOpencodeConfig(context, providers, { providerId: selected.providerId, model: selected.model });
+  return true;
+}
+
+function modelQuickPickItems(agent: AgentName, providers: ProviderConfig[], agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState): ModelQuickPickItem[] {
+  return providers
+    .filter((provider) => providerSupportsAgent(provider, agent) && provider.models.length > 0)
+    .flatMap((provider) => provider.models.map((model) => modelQuickPickItem(agent, provider, model, agentState)));
+}
+
+function modelQuickPickItem(agent: AgentName, provider: ProviderConfig, model: string, agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState): ModelQuickPickItem {
+  const isCurrent = isCurrentAgentModel(agent, agentState, provider.id, model);
+  return {
+    label: `${provider.name} / ${model}`,
+    description: isCurrent ? '当前' : undefined,
+    detail: `${agentDisplayName(agent)} API: ${providerApiUrl(provider, agent)}`,
+    providerId: provider.id,
+    model
+  };
+}
+
+function providerSupportsAgent(provider: ProviderConfig, agent: AgentName): boolean {
+  return Boolean(providerApiUrl(provider, agent));
+}
+
+function providerApiUrl(provider: ProviderConfig, agent: AgentName): string {
+  if (agent === 'claude') {
+    return provider.claudeBaseUrl;
+  }
+  if (agent === 'codex') {
+    return provider.codexBaseUrl;
+  }
+  return provider.opencodeBaseUrl;
+}
+
+function isCurrentAgentModel(agent: AgentName, agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState, providerId: string, model: string): boolean {
+  if (agent === 'claude') {
+    const claude = agentState as ClaudeAgentState;
+    const currentModels = uniqueNonEmpty(CLAUDE_MODEL_KEYS.map((key) => claude.models[key]));
+    return claude.selectedProviderId === providerId && currentModels.length === 1 && currentModels[0] === model;
+  }
+  if (agent === 'codex') {
+    const codex = agentState as CodexAgentState;
+    return codex.selectedProviderId === providerId && codex.model === model;
+  }
+  const opencode = agentState as OpencodeAgentState;
+  return opencode.selectedProviderId === providerId && opencode.model === model;
+}
+
+function currentAgentModelLabel(agent: AgentName, agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState, providers: ProviderConfig[]): string {
+  const providerName = currentProviderName(agentState.selectedProviderId, providers);
+  if (agent === 'claude') {
+    const claude = agentState as ClaudeAgentState;
+    const currentModels = uniqueNonEmpty(CLAUDE_MODEL_KEYS.map((key) => claude.models[key]));
+    if (!currentModels.length) {
+      return providerName ? `${providerName} / 未配置` : '未配置';
+    }
+    if (currentModels.length === 1) {
+      return providerName ? `${providerName} / ${currentModels[0]}` : currentModels[0];
+    }
+    const suffix = currentModels.length > 3 ? '...' : '';
+    return `多个模型：${currentModels.slice(0, 3).join(', ')}${suffix}`;
+  }
+  if (agent === 'codex') {
+    const codex = agentState as CodexAgentState;
+    const owner = providerName || codex.modelProvider;
+    return codex.model ? (owner ? `${owner} / ${codex.model}` : codex.model) : '未配置';
+  }
+  const opencode = agentState as OpencodeAgentState;
+  const owner = providerName || opencode.providerKey;
+  return opencode.model ? (owner ? `${owner} / ${opencode.model}` : opencode.model) : '未配置';
+}
+
+function currentProviderName(providerId: string, providers: ProviderConfig[]): string {
+  return providers.find((provider) => provider.id === providerId)?.name ?? '';
+}
+
+function uniqueNonEmpty(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function agentDisplayName(agent: AgentName): string {
+  if (agent === 'claude') {
+    return 'Claude';
+  }
+  if (agent === 'codex') {
+    return 'Codex';
+  }
+  return 'opencode';
 }
 
 function assertAgentName(value: string): AgentName {
