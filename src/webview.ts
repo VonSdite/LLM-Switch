@@ -468,10 +468,21 @@ export function getManagerHtml(webview: vscode.Webview): string {
       display: grid;
       gap: 8px;
     }
-    .stack-field {
+    .opencode-row {
       display: grid;
-      gap: 8px;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+      gap: 10px;
       min-width: 0;
+      align-items: end;
+    }
+    .opencode-npm-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .opencode-npm-control .ghost {
+      min-width: 70px;
     }
     .section-title {
       margin: 0;
@@ -874,6 +885,20 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (action === 'provider-api-key-toggle') {
           toggleProviderApiKey(button);
         }
+        if (action === 'provider-opencode-npm-custom') {
+          updateProviderModalDraftFromForm();
+          if (providerModal) {
+            providerModal.opencodeNpm = '';
+          }
+          render();
+        }
+        if (action === 'provider-opencode-npm-builtins') {
+          updateProviderModalDraftFromForm();
+          if (providerModal) {
+            providerModal.opencodeNpm = defaultOpencodeNpm;
+          }
+          render();
+        }
         if (action === 'model-picker-close') {
           updateProviderModalDraftFromForm();
           modelPicker = null;
@@ -966,13 +991,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (target.id === 'providerProxyMode') {
           const field = document.getElementById('customProxyField');
-          if (field) {
-            field.style.display = target.value === 'custom' ? '' : 'none';
-            field.hidden = target.value !== 'custom';
-          }
-        }
-        if (target.id === 'providerOpencodeNpm') {
-          const field = document.getElementById('opencodeCustomNpmField');
           if (field) {
             field.style.display = target.value === 'custom' ? '' : 'none';
             field.hidden = target.value !== 'custom';
@@ -1171,14 +1189,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
                   field('Codex API 地址', '<input id="providerCodexBaseUrl" value="' + attr(selected.codexBaseUrl) + '" placeholder="http://host:port/v1">') +
                   field('Codex wire_api', select('providerCodexWireApi', [['responses', 'responses'], ['chat', 'chat']], selected.codexWireApi)) +
                 '</div>' +
-                '<div class="grid">' +
+                '<div class="opencode-row">' +
                   field('opencode API 地址', '<input id="providerOpencodeBaseUrl" value="' + attr(selected.opencodeBaseUrl) + '" placeholder="http://host:port/v1">') +
-                  '<div class="stack-field">' +
-                    field('opencode npm', select('providerOpencodeNpm', opencodeNpmOptions(), opencodeNpmSelection(selectedOpencodeNpm))) +
-                    '<div id="opencodeCustomNpmField" ' + (isBuiltinOpencodeNpm(selectedOpencodeNpm) ? 'hidden' : '') + '>' +
-                      field('自定义 npm 包', '<input id="providerOpencodeCustomNpm" value="' + attr(isBuiltinOpencodeNpm(selectedOpencodeNpm) ? '' : selectedOpencodeNpm) + '" placeholder="@ai-sdk/provider-name">') +
-                    '</div>' +
-                  '</div>' +
+                  renderOpencodeNpmField(selectedOpencodeNpm) +
                 '</div>' +
               '</div>' +
               '<div class="section">' +
@@ -1513,7 +1526,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           toast('error', '自定义代理模式需要填写代理地址。');
           return;
         }
-        if (value('providerOpencodeNpm') === 'custom' && !payload.opencodeNpm.trim()) {
+        if (isCustomOpencodeNpmForm() && !payload.opencodeNpm.trim()) {
           toast('error', '自定义 opencode npm 包名必填。');
           return;
         }
@@ -1525,7 +1538,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function collectProviderForm() {
-        const opencodeNpmSelectionValue = value('providerOpencodeNpm');
+        const customOpencodeNpm = isCustomOpencodeNpmForm();
         return {
           id: providerModal && providerModal.id ? providerModal.id : undefined,
           name: value('providerName'),
@@ -1538,8 +1551,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
           codexBaseUrl: value('providerCodexBaseUrl'),
           codexWireApi: value('providerCodexWireApi'),
           opencodeBaseUrl: value('providerOpencodeBaseUrl'),
-          opencodeNpm: opencodeNpmSelectionValue === 'custom' ? value('providerOpencodeCustomNpm') : opencodeNpmSelectionValue
+          opencodeNpm: customOpencodeNpm ? value('providerOpencodeCustomNpm') : value('providerOpencodeNpm')
         };
+      }
+
+      function isCustomOpencodeNpmForm() {
+        return Boolean(document.getElementById('providerOpencodeCustomNpm'));
       }
 
       function parseModelText(text) {
@@ -1780,16 +1797,24 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return /^[A-Za-z0-9_-]+$/.test(text) ? text : JSON.stringify(text);
       }
 
+      function renderOpencodeNpmField(selectedOpencodeNpm) {
+        if (isBuiltinOpencodeNpm(selectedOpencodeNpm)) {
+          return field('opencode npm', '<div class="opencode-npm-control">' +
+            select('providerOpencodeNpm', opencodeNpmOptions(), selectedOpencodeNpm) +
+            '<button type="button" class="ghost" data-action="provider-opencode-npm-custom">自定义</button>' +
+          '</div>');
+        }
+        return field('opencode npm', '<div class="opencode-npm-control">' +
+          '<input id="providerOpencodeCustomNpm" value="' + attr(selectedOpencodeNpm) + '" placeholder="@ai-sdk/provider-name">' +
+          '<button type="button" class="ghost" data-action="provider-opencode-npm-builtins">选择</button>' +
+        '</div>');
+      }
+
       function opencodeNpmOptions() {
         return [
           ['@ai-sdk/openai-compatible', '@ai-sdk/openai-compatible'],
-          ['@ai-sdk/openai', '@ai-sdk/openai'],
-          ['custom', '自定义']
+          ['@ai-sdk/openai', '@ai-sdk/openai']
         ];
-      }
-
-      function opencodeNpmSelection(value) {
-        return isBuiltinOpencodeNpm(value) ? value : 'custom';
       }
 
       function isBuiltinOpencodeNpm(value) {
