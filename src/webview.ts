@@ -201,7 +201,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
     .topbar {
       display: flex;
       align-items: flex-end;
-      justify-content: space-between;
+      justify-content: flex-start;
       gap: 10px;
       padding: 8px 12px 0;
       border-bottom: 1px solid var(--vscode-panel-border);
@@ -291,6 +291,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
       margin: 2px 0 0;
       color: var(--vscode-descriptionForeground);
       font-size: 12px;
+    }
+    .page-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
     }
     .table-wrap {
       border: 1px solid var(--vscode-panel-border);
@@ -492,7 +498,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
     .agent-panel {
       display: grid;
       gap: 12px;
-      max-width: 920px;
+      width: 100%;
     }
     .model-grid {
       display: grid;
@@ -500,9 +506,21 @@ export function getManagerHtml(webview: vscode.Webview): string {
     }
     .model-row {
       display: grid;
-      grid-template-columns: minmax(230px, 0.85fr) minmax(220px, 1fr);
+      grid-template-columns: minmax(230px, 0.7fr) minmax(220px, 560px);
       gap: 10px;
       align-items: center;
+    }
+    .model-select {
+      width: min(100%, 560px);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .model-select option {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .summary {
       display: grid;
@@ -695,6 +713,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
       .page-head {
         display: grid;
       }
+      .page-actions {
+        justify-content: flex-start;
+      }
       .modal-backdrop {
         padding: 10px;
       }
@@ -708,7 +729,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
   <div class="shell">
     <header class="topbar">
       <nav class="tabs" id="tabs"></nav>
-      <button class="refresh-button" data-action="refresh" title="刷新配置">刷新</button>
     </header>
     <main id="app">
       <div class="empty">Loading...</div>
@@ -1028,7 +1048,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return '<section>' +
           '<div class="page-head">' +
             '<div><h2>Providers</h2><p>管理共享 Provider。</p></div>' +
-            '<button data-action="provider-new">新增 Provider</button>' +
+            '<div class="page-actions">' +
+              renderRefreshButton() +
+              '<button data-action="provider-new">新增 Provider</button>' +
+            '</div>' +
           '</div>' +
           '<div class="table-wrap">' +
             '<table aria-label="Providers">' +
@@ -1178,10 +1201,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return '<section>' +
           '<div class="page-head">' +
             '<div><h2>Agents</h2><p>为 Claude、Codex、opencode 应用 Provider 和模型配置。</p></div>' +
+            '<div class="page-actions">' + renderRefreshButton() + '</div>' +
           '</div>' +
           renderAgentTabs() +
           (activeAgentTab === 'claude' ? renderClaude() : activeAgentTab === 'codex' ? renderCodex() : renderOpencode()) +
         '</section>';
+      }
+
+      function renderRefreshButton() {
+        return '<button class="refresh-button" data-action="refresh" title="刷新配置">刷新</button>';
       }
 
       function renderAgentTabs() {
@@ -1714,7 +1742,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (!options.length) {
           options.push(['', '未配置']);
         }
-        return select(id, options, currentValue, disabled);
+        return select(id, options.map(function (option) {
+          return [option[0], truncateModelOption(option[1]), option[1]];
+        }), currentValue, disabled, 'model-select');
       }
 
       function currentModelForSelection(provider, selectedId, currentProviderId, current) {
@@ -1819,6 +1849,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return '<label><span class="label-line"><span>' + h(label) + '</span><span class="help-icon" title="' + attr(help) + '" aria-label="' + attr(help) + '">?</span></span>' + control + '</label>';
       }
 
+      function truncateModelOption(label) {
+        const text = String(label || '');
+        return text.length > 72 ? text.slice(0, 34) + '...' + text.slice(-24) : text;
+      }
+
       function icon(name) {
         if (name === 'eye-off') {
           return '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.7 5.1A11 11 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-2.1 3.2"></path><path d="M6.6 6.6C3.2 8.8 2 12 2 12s3 7 10 7a10.8 10.8 0 0 0 4.4-.9"></path><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"></path><path d="M3 3l18 18"></path></svg>';
@@ -1826,11 +1861,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
       }
 
-      function select(id, options, selected, disabled) {
-        return '<select id="' + h(id) + '" ' + (disabled ? 'disabled' : '') + '>' + options.map(function (option) {
+      function select(id, options, selected, disabled, className) {
+        return '<select id="' + h(id) + '" ' + (className ? 'class="' + attr(className) + '" ' : '') + (disabled ? 'disabled' : '') + '>' + options.map(function (option) {
           const value = option[0];
           const label = option[1];
-          return '<option value="' + attr(value) + '" ' + (value === selected ? 'selected' : '') + '>' + h(label) + '</option>';
+          const title = option[2] || label;
+          return '<option value="' + attr(value) + '" title="' + attr(title) + '" ' + (value === selected ? 'selected' : '') + '>' + h(label) + '</option>';
         }).join('') + '</select>';
       }
 
