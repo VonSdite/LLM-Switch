@@ -314,15 +314,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
     .agents-col {
       width: 18%;
     }
-    .models-col,
-    .ssl-col {
-      width: 84px;
-    }
-    .proxy-col {
-      width: 120px;
+    .models-col {
+      width: auto;
     }
     .actions-col {
-      width: 160px;
+      width: 132px;
+      text-align: right;
     }
     .drag-handle {
       width: 26px;
@@ -360,6 +357,31 @@ export function getManagerHtml(webview: vscode.Webview): string {
       flex-wrap: wrap;
       gap: 5px;
     }
+    .model-id-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      align-items: center;
+      min-width: 0;
+    }
+    .model-id {
+      max-width: 180px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 2px 6px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 999px;
+      background: var(--vscode-textCodeBlock-background, transparent);
+      color: var(--vscode-foreground);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+    .model-more {
+      color: var(--vscode-descriptionForeground);
+      white-space: nowrap;
+    }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -374,10 +396,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
     }
     .row-actions {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       gap: 6px;
       justify-content: flex-end;
       position: relative;
+    }
+    .actions-cell {
+      overflow: visible;
+      text-align: right;
     }
     .row-actions button {
       min-height: 26px;
@@ -1060,8 +1086,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 '<th class="name-col">Provider</th>' +
                 '<th class="agents-col">Agents</th>' +
                 '<th class="models-col">模型</th>' +
-                '<th class="proxy-col">代理</th>' +
-                '<th class="ssl-col">SSL</th>' +
                 '<th class="actions-col">操作</th>' +
               '</tr></thead>' +
               '<tbody>' + renderProviderRows() + '</tbody>' +
@@ -1072,17 +1096,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       function renderProviderRows() {
         if (!state.providers.length) {
-          return '<tr><td colspan="7"><div class="empty">还没有 Provider。点击右上角新增 Provider。</div></td></tr>';
+          return '<tr><td colspan="5"><div class="empty">还没有 Provider。点击右上角新增 Provider。</div></td></tr>';
         }
         return state.providers.map(function (provider) {
           return '<tr data-provider-row-id="' + h(provider.id) + '">' +
             '<td class="drag-col"><button class="drag-handle" draggable="true" data-drag-provider-id="' + h(provider.id) + '" title="拖拽排序" aria-label="拖拽排序">⋮⋮</button></td>' +
             '<td><div class="provider-name">' + h(provider.name) + '</div></td>' +
             '<td><span class="badges">' + renderAgentBadges(provider) + '</span></td>' +
-            '<td class="nowrap">' + h(String(provider.models.length)) + '</td>' +
-            '<td>' + h(proxyLabel(provider)) + '</td>' +
-            '<td>' + h(provider.sslCheck ? 'check' : 'no check') + '</td>' +
-            '<td><div class="row-actions">' +
+            '<td>' + renderProviderModels(provider) + '</td>' +
+            '<td class="actions-cell"><div class="row-actions">' +
               '<button class="secondary" data-action="provider-edit" data-provider-id="' + h(provider.id) + '">编辑</button>' +
               '<button class="danger" data-action="provider-delete" data-provider-id="' + h(provider.id) + '">删除</button>' +
               renderDeleteConfirm(provider) +
@@ -1827,18 +1849,20 @@ export function getManagerHtml(webview: vscode.Webview): string {
         ].join('');
       }
 
-      function badge(label) {
-        return '<span class="badge">' + h(label) + '</span>';
+      function renderProviderModels(provider) {
+        const models = provider.models || [];
+        if (!models.length) {
+          return '<span class="muted">未配置</span>';
+        }
+        const visibleModels = models.slice(0, 4).map(function (model) {
+          return '<span class="model-id" title="' + attr(model) + '">' + h(model) + '</span>';
+        }).join('');
+        const more = models.length > 4 ? '<span class="model-more" title="共 ' + h(String(models.length)) + ' 个模型">...</span>' : '';
+        return '<div class="model-id-list">' + visibleModels + more + '</div>';
       }
 
-      function proxyLabel(provider) {
-        if (provider.proxyMode === 'custom') {
-          return provider.customProxyUrl ? '自定义' : '自定义（未填）';
-        }
-        if (provider.proxyMode === 'system') {
-          return '系统代理';
-        }
-        return '直连';
+      function badge(label) {
+        return '<span class="badge">' + h(label) + '</span>';
       }
 
       function field(label, control) {
