@@ -1309,6 +1309,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
         render();
         post('fetchProviderModels', {
           apiKey: payload.apiKey,
+          proxyMode: payload.proxyMode,
+          customProxyUrl: payload.customProxyUrl,
           claudeBaseUrl: payload.claudeBaseUrl,
           codexBaseUrl: payload.codexBaseUrl,
           opencodeBaseUrl: payload.opencodeBaseUrl

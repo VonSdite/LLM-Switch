@@ -1,3 +1,6 @@
+import * as http from 'node:http';
+import * as https from 'node:https';
+import * as tls from 'node:tls';
 import * as vscode from 'vscode';
 import {
   openAgentConfigFiles,
@@ -19,9 +22,17 @@ interface WebviewMessage {
 
 interface FetchProviderModelsPayload {
   apiKey: string;
+  proxyMode: string;
+  customProxyUrl: string;
   claudeBaseUrl: string;
   codexBaseUrl: string;
   opencodeBaseUrl: string;
+}
+
+interface ModelRequestOptions {
+  apiKey: string;
+  proxyMode: string;
+  customProxyUrl: string;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -253,6 +264,8 @@ function fetchProviderModelsPayload(payload: unknown): FetchProviderModelsPayloa
   const record = asRecord(payload);
   return {
     apiKey: stringField(record, 'apiKey'),
+    proxyMode: stringField(record, 'proxyMode'),
+    customProxyUrl: stringField(record, 'customProxyUrl'),
     claudeBaseUrl: stringField(record, 'claudeBaseUrl'),
     codexBaseUrl: stringField(record, 'codexBaseUrl'),
     opencodeBaseUrl: stringField(record, 'opencodeBaseUrl')
@@ -266,7 +279,7 @@ async function fetchProviderModels(payload: FetchProviderModelsPayload): Promise
 
   for (const url of candidates) {
     try {
-      const models = await fetchModelsFromUrl(url, payload.apiKey);
+      const models = await fetchModelsFromUrl(url, payload);
       if (models.length > 0) {
         return { models, sourceUrl: url };
       }
@@ -308,35 +321,232 @@ function joinUrl(baseUrl: string, suffix: string): string {
   return `${baseUrl.replace(/\/+$/g, '')}/${suffix.replace(/^\/+/g, '')}`;
 }
 
-async function fetchModelsFromUrl(url: string, apiKey: string): Promise<string[]> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+async function fetchModelsFromUrl(url: string, options: ModelRequestOptions): Promise<string[]> {
+  const response = await requestText(url, options);
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw new Error(`HTTP ${response.statusCode}${response.body ? ` ${response.body.slice(0, 160)}` : ''}`);
+  }
+
+  let json: unknown;
   try {
-    const headers: Record<string, string> = {
-      accept: 'application/json'
-    };
-    if (apiKey.trim()) {
-      headers.authorization = `Bearer ${apiKey.trim()}`;
-    }
+    json = response.body ? JSON.parse(response.body) : {};
+  } catch {
+    throw new Error('响应不是有效 JSON');
+  }
+  return extractModelNames(json);
+}
 
-    const response = await fetch(url, {
+function requestText(rawUrl: string, options: ModelRequestOptions): Promise<{ statusCode: number; body: string }> {
+  const target = new URL(rawUrl);
+  const headers = modelRequestHeaders(target, options.apiKey);
+  if (options.proxyMode === 'custom' && options.customProxyUrl.trim()) {
+    return requestViaProxy(target, headers, options.customProxyUrl.trim());
+  }
+  return requestDirect(target, headers);
+}
+
+function modelRequestHeaders(target: URL, apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    host: target.host
+  };
+  if (apiKey.trim()) {
+    headers.authorization = `Bearer ${apiKey.trim()}`;
+  }
+  return headers;
+}
+
+function requestDirect(target: URL, headers: Record<string, string>): Promise<{ statusCode: number; body: string }> {
+  const transport = target.protocol === 'https:' ? https : http;
+  return nodeRequest({
+    transport,
+    options: {
+      protocol: target.protocol,
+      hostname: target.hostname,
+      port: target.port || undefined,
+      method: 'GET',
+      path: `${target.pathname}${target.search}`,
       headers,
-      signal: controller.signal
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}${text ? ` ${text.slice(0, 160)}` : ''}`);
+      rejectUnauthorized: false
     }
+  });
+}
 
-    let json: unknown;
-    try {
-      json = text ? JSON.parse(text) : {};
-    } catch {
-      throw new Error('响应不是有效 JSON');
+function requestViaProxy(target: URL, headers: Record<string, string>, proxyUrl: string): Promise<{ statusCode: number; body: string }> {
+  const proxy = parseProxyUrl(proxyUrl);
+  if (target.protocol === 'http:') {
+    const transport = proxy.protocol === 'https:' ? https : http;
+    const proxyHeaders = { ...headers, host: target.host };
+    applyProxyAuthorization(proxyHeaders, proxy);
+    return nodeRequest({
+      transport,
+      options: {
+        protocol: proxy.protocol,
+        hostname: proxy.hostname,
+        port: proxy.port || undefined,
+        method: 'GET',
+        path: target.toString(),
+        headers: proxyHeaders,
+        rejectUnauthorized: false
+      }
+    });
+  }
+  return requestHttpsViaProxy(target, headers, proxy);
+}
+
+function requestHttpsViaProxy(target: URL, headers: Record<string, string>, proxy: URL): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const proxyHeaders: Record<string, string> = {
+      host: `${target.hostname}:${target.port || '443'}`
+    };
+    applyProxyAuthorization(proxyHeaders, proxy);
+    const transport = proxy.protocol === 'https:' ? https : http;
+    const request = transport.request({
+      protocol: proxy.protocol,
+      hostname: proxy.hostname,
+      port: proxy.port || undefined,
+      method: 'CONNECT',
+      path: `${target.hostname}:${target.port || '443'}`,
+      headers: proxyHeaders,
+      rejectUnauthorized: false
+    });
+    const timeout = setTimeout(() => {
+      request.destroy(new Error('请求超时'));
+    }, 15000);
+
+    request.once('connect', (response, socket) => {
+      clearTimeout(timeout);
+      if (response.statusCode !== 200) {
+        socket.destroy();
+        reject(new Error(`代理 CONNECT 失败：HTTP ${response.statusCode || 0}`));
+        return;
+      }
+      const tlsSocket = tls.connect({
+        socket,
+        servername: target.hostname,
+        rejectUnauthorized: false
+      });
+      tlsSocket.once('secureConnect', () => {
+        writeRawHttpRequest(tlsSocket, target, headers);
+        readRawHttpResponse(tlsSocket).then(resolve, reject);
+      });
+      tlsSocket.once('error', reject);
+    });
+    request.once('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    request.end();
+  });
+}
+
+function nodeRequest(args: { transport: typeof http | typeof https; options: http.RequestOptions | https.RequestOptions }): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const request = args.transport.request(args.options, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      response.on('end', () => {
+        resolve({
+          statusCode: response.statusCode || 0,
+          body: Buffer.concat(chunks).toString('utf8')
+        });
+      });
+    });
+    request.setTimeout(15000, () => request.destroy(new Error('请求超时')));
+    request.once('error', reject);
+    request.end();
+  });
+}
+
+function writeRawHttpRequest(socket: tls.TLSSocket, target: URL, headers: Record<string, string>): void {
+  const path = `${target.pathname}${target.search}`;
+  const lines = [
+    `GET ${path} HTTP/1.1`,
+    ...Object.entries(headers).map(([key, value]) => `${key}: ${value}`),
+    'connection: close',
+    '',
+    ''
+  ];
+  socket.write(lines.join('\r\n'));
+}
+
+function readRawHttpResponse(socket: tls.TLSSocket): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    socket.setTimeout(15000, () => socket.destroy(new Error('请求超时')));
+    socket.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    socket.once('end', () => {
+      const raw = Buffer.concat(chunks);
+      const separator = raw.indexOf('\r\n\r\n');
+      if (separator < 0) {
+        reject(new Error('响应格式无效'));
+        return;
+      }
+      const head = raw.slice(0, separator).toString('utf8');
+      let body: Buffer = Buffer.from(raw.subarray(separator + 4));
+      const statusCode = Number((head.match(/^HTTP\/\d(?:\.\d)?\s+(\d+)/) || [])[1] || 0);
+      const headers = parseRawHeaders(head);
+      if ((headers['transfer-encoding'] || '').toLocaleLowerCase().includes('chunked')) {
+        body = decodeChunkedBody(body);
+      }
+      resolve({ statusCode, body: body.toString('utf8') });
+    });
+    socket.once('error', reject);
+  });
+}
+
+function parseRawHeaders(head: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  head.split('\r\n').slice(1).forEach((line) => {
+    const separator = line.indexOf(':');
+    if (separator > 0) {
+      headers[line.slice(0, separator).trim().toLocaleLowerCase()] = line.slice(separator + 1).trim();
     }
-    return extractModelNames(json);
-  } finally {
-    clearTimeout(timeout);
+  });
+  return headers;
+}
+
+function decodeChunkedBody(body: Buffer): Buffer {
+  const chunks: Buffer[] = [];
+  let offset = 0;
+  while (offset < body.length) {
+    const lineEnd = body.indexOf('\r\n', offset);
+    if (lineEnd < 0) {
+      break;
+    }
+    const sizeText = body.slice(offset, lineEnd).toString('ascii').split(';')[0].trim();
+    const size = Number.parseInt(sizeText, 16);
+    if (!Number.isFinite(size) || size < 0) {
+      break;
+    }
+    offset = lineEnd + 2;
+    if (size === 0) {
+      break;
+    }
+    chunks.push(body.slice(offset, offset + size));
+    offset += size + 2;
+  }
+  return Buffer.concat(chunks);
+}
+
+function parseProxyUrl(proxyUrl: string): URL {
+  try {
+    const parsed = new URL(proxyUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('代理地址只支持 http 或 https。');
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message === '代理地址只支持 http 或 https。') {
+      throw error;
+    }
+    throw new Error(`代理地址无效：${proxyUrl}`);
+  }
+}
+
+function applyProxyAuthorization(headers: Record<string, string>, proxy: URL): void {
+  if (proxy.username || proxy.password) {
+    headers['proxy-authorization'] = `Basic ${Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString('base64')}`;
   }
 }
 

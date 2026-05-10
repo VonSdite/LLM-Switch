@@ -8,7 +8,7 @@ LLM-Switch 是一个 VS Code 插件，用于统一管理 AI Provider，并把 Pr
 - 支持设置Provider代理模式，包括直连模式、系统代理模式、自定义代理模式。
 - 支持配置 SSL 证书校验，默认不校验。
 - 支持维护 Provider 的模型列表。
-- 支持从 Provider API 拉取模型列表，只会尝试 `/v1/models` 和 `/models` 两个接口。
+- 支持从 Provider API 拉取模型列表，只会尝试 `/v1/models` 和 `/models` 两个接口；拉取时会携带 API key，支持自定义代理，并始终不校验 SSL 证书。
 - 支持分别配置 Claude API 地址、Codex API 地址、opencode API 地址。
 - Codex API 地址支持配置 `wire_api`，可选 `responses` 或 `chat`。
 - 支持在编辑器中打开独立的 LLM-Switch 管理页面。
@@ -56,7 +56,7 @@ Provider 页面行为：
 
 - 点击 `新增 Provider` 会打开弹窗填写 Provider 内容。
 - 点击表格中的 `编辑` 会打开弹窗修改 Provider 内容。
-- Provider 弹窗的模型列表支持 `拉取模型`，插件会从当前填写的 API 地址推导基础地址，并尝试 `/v1/models`、`/models`。拉取后可搜索、勾选模型并加入当前清单。
+- Provider 弹窗的模型列表支持 `拉取模型`，插件会从当前填写的 API 地址推导基础地址，并尝试 `/v1/models`、`/models`。拉取时会携带 API key，若选择自定义代理则通过该代理请求，且始终不校验 SSL 证书。拉取后可搜索、勾选模型并加入当前清单。
 - 点击表格中的 `删除` 会提示确认，确认后删除 Provider。
 - 表格最左侧的把手支持拖拽，拖拽后会保存 Provider 顺序。
 
