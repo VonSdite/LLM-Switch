@@ -1075,7 +1075,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
           '<div class="page-head">' +
             '<div><h2>Providers</h2><p>管理共享 Provider。</p></div>' +
             '<div class="page-actions">' +
-              renderRefreshButton() +
               '<button data-action="provider-new">新增 Provider</button>' +
             '</div>' +
           '</div>' +
