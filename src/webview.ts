@@ -470,19 +470,32 @@ export function getManagerHtml(webview: vscode.Webview): string {
     }
     .opencode-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
       gap: 10px;
       min-width: 0;
       align-items: end;
     }
     .opencode-npm-control {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr);
       gap: 6px;
       align-items: center;
     }
-    .opencode-npm-control .ghost {
-      min-width: 70px;
+    .opencode-npm-control.custom {
+      grid-template-columns: minmax(150px, 0.72fr) minmax(0, 1fr);
+    }
+    .inline-setting {
+      display: grid;
+      grid-template-columns: auto minmax(180px, 260px);
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+    .inline-setting.custom {
+      grid-template-columns: auto minmax(170px, 220px) minmax(0, 1fr);
+    }
+    .inline-setting-label {
+      white-space: nowrap;
     }
     .section-title {
       margin: 0;
@@ -751,6 +764,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
     }
     @media (max-width: 760px) {
       .grid,
+      .opencode-row,
+      .inline-setting,
+      .inline-setting.custom,
       .model-row,
       .change-row,
       .path-line,
@@ -885,20 +901,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (action === 'provider-api-key-toggle') {
           toggleProviderApiKey(button);
         }
-        if (action === 'provider-opencode-npm-custom') {
-          updateProviderModalDraftFromForm();
-          if (providerModal) {
-            providerModal.opencodeNpm = '';
-          }
-          render();
-        }
-        if (action === 'provider-opencode-npm-builtins') {
-          updateProviderModalDraftFromForm();
-          if (providerModal) {
-            providerModal.opencodeNpm = defaultOpencodeNpm;
-          }
-          render();
-        }
         if (action === 'model-picker-close') {
           updateProviderModalDraftFromForm();
           modelPicker = null;
@@ -990,11 +992,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
           render();
         }
         if (target.id === 'providerProxyMode') {
-          const field = document.getElementById('customProxyField');
-          if (field) {
-            field.style.display = target.value === 'custom' ? '' : 'none';
-            field.hidden = target.value !== 'custom';
-          }
+          updateProviderModalDraftFromForm();
+          render();
+        }
+        if (target.id === 'providerOpencodeNpm') {
+          updateProviderModalDraftFromForm();
+          render();
         }
       });
 
@@ -1167,7 +1170,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return '';
         }
         const selected = providerModal;
-        const selectedOpencodeNpm = selected.opencodeNpm || defaultOpencodeNpm;
+        const selectedOpencodeNpm = selected.opencodeNpm === undefined || selected.opencodeNpm === null ? defaultOpencodeNpm : selected.opencodeNpm;
         return '<div class="modal-backdrop" role="presentation">' +
           '<section class="modal" role="dialog" aria-modal="true" aria-label="' + h(selected.id ? '编辑 Provider' : '新增 Provider') + '">' +
             '<header class="modal-head">' +
@@ -1195,10 +1198,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 '</div>' +
               '</div>' +
               '<div class="section">' +
-                '<div class="grid">' +
-                  field('代理模式', select('providerProxyMode', [['direct', '直连模式'], ['system', '系统代理模式'], ['custom', '自定义代理']], selected.proxyMode)) +
-                  '<div id="customProxyField" ' + (selected.proxyMode === 'custom' ? '' : 'hidden') + '>' + field('自定义代理地址', '<input id="providerCustomProxyUrl" value="' + attr(selected.customProxyUrl) + '" placeholder="http://127.0.0.1:7890">') + '</div>' +
-                '</div>' +
+                renderProxyModeField(selected) +
                 '<label class="checkbox-line"><span>SSL 证书校验</span><input id="providerSslCheck" type="checkbox" ' + (selected.sslCheck ? 'checked' : '') + '></label>' +
               '</div>' +
               '<div class="section">' +
@@ -1526,7 +1526,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           toast('error', '自定义代理模式需要填写代理地址。');
           return;
         }
-        if (isCustomOpencodeNpmForm() && !payload.opencodeNpm.trim()) {
+        if ((value('providerOpencodeNpm') === 'custom' || isCustomOpencodeNpmForm()) && !payload.opencodeNpm.trim()) {
           toast('error', '自定义 opencode npm 包名必填。');
           return;
         }
@@ -1538,7 +1538,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function collectProviderForm() {
-        const customOpencodeNpm = isCustomOpencodeNpmForm();
+        const opencodeNpmSelectionValue = value('providerOpencodeNpm');
+        const customOpencodeNpm = opencodeNpmSelectionValue ? opencodeNpmSelectionValue === 'custom' : isCustomOpencodeNpmForm();
         return {
           id: providerModal && providerModal.id ? providerModal.id : undefined,
           name: value('providerName'),
@@ -1798,22 +1799,27 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function renderOpencodeNpmField(selectedOpencodeNpm) {
-        if (isBuiltinOpencodeNpm(selectedOpencodeNpm)) {
-          return field('opencode npm', '<div class="opencode-npm-control">' +
-            select('providerOpencodeNpm', opencodeNpmOptions(), selectedOpencodeNpm) +
-            '<button type="button" class="ghost" data-action="provider-opencode-npm-custom">自定义</button>' +
-          '</div>');
-        }
-        return field('opencode npm', '<div class="opencode-npm-control">' +
-          '<input id="providerOpencodeCustomNpm" value="' + attr(selectedOpencodeNpm) + '" placeholder="@ai-sdk/provider-name">' +
-          '<button type="button" class="ghost" data-action="provider-opencode-npm-builtins">选择</button>' +
+        const custom = !isBuiltinOpencodeNpm(selectedOpencodeNpm);
+        return field('opencode npm', '<div class="opencode-npm-control ' + (custom ? 'custom' : '') + '">' +
+          select('providerOpencodeNpm', opencodeNpmOptions(), custom ? 'custom' : selectedOpencodeNpm) +
+          (custom ? '<input id="providerOpencodeCustomNpm" value="' + attr(selectedOpencodeNpm) + '" placeholder="@ai-sdk/provider-name">' : '') +
         '</div>');
+      }
+
+      function renderProxyModeField(selected) {
+        const custom = selected.proxyMode === 'custom';
+        return '<div class="inline-setting ' + (custom ? 'custom' : '') + '">' +
+          '<span class="inline-setting-label">代理模式</span>' +
+          select('providerProxyMode', [['direct', '直连模式'], ['system', '系统代理模式'], ['custom', '自定义代理']], selected.proxyMode) +
+          (custom ? '<input id="providerCustomProxyUrl" value="' + attr(selected.customProxyUrl) + '" placeholder="http://127.0.0.1:7890">' : '') +
+        '</div>';
       }
 
       function opencodeNpmOptions() {
         return [
           ['@ai-sdk/openai-compatible', '@ai-sdk/openai-compatible'],
-          ['@ai-sdk/openai', '@ai-sdk/openai']
+          ['@ai-sdk/openai', '@ai-sdk/openai'],
+          ['custom', '自定义']
         ];
       }
 
