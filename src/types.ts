@@ -27,34 +27,41 @@ export interface ProviderConfig {
   opencodeBaseUrl: string;
 }
 
-export interface ClaudeAgentState {
+export interface AgentConfigFileState {
   path: string;
+  defaultPath: string;
+  customPath: string;
+  usesDefaultPath: boolean;
   exists: boolean;
   parseError?: string;
+}
+
+export interface ClaudeAgentState extends AgentConfigFileState {
   selectedProviderId: string;
   baseUrl: string;
   hasAuthToken: boolean;
   models: Record<ClaudeModelKey, string>;
 }
 
-export interface CodexAgentState {
-  path: string;
-  exists: boolean;
-  parseError?: string;
+export interface CodexAgentState extends AgentConfigFileState {
   selectedProviderId: string;
   modelProvider: string;
+  providerName: string;
   providerBaseUrl: string;
   wireApi: string;
+  auth: AgentConfigFileState;
+  hasOpenAiApiKey: boolean;
   model: string;
 }
 
-export interface OpencodeAgentState {
-  path: string;
-  exists: boolean;
-  parseError?: string;
+export interface OpencodeAgentState extends AgentConfigFileState {
   selectedProviderId: string;
   providerKey: string;
+  providerName: string;
+  providerNpm: string;
   providerBaseUrl: string;
+  hasProviderApiKey: boolean;
+  providerModelCount: number;
   model: string;
 }
 

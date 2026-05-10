@@ -1,8 +1,8 @@
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as TOML from '@iarna/toml';
+import * as vscode from 'vscode';
 import { parse as parseJsonc, ParseError, printParseErrorCode } from 'jsonc-parser';
-import { getAgentConfigPath } from './configPaths';
+import { ConfigPathTarget, getAgentConfigPath, getAgentConfigPathInfo, getCodexAuthConfigPath, getCodexAuthConfigPathInfo, getConfigPath } from './configPaths';
 import { findProvider } from './providerStore';
 import {
   AgentsState,
@@ -18,78 +18,94 @@ import {
 
 type JsonObject = Record<string, unknown>;
 
-const CLAUDE_DEFAULT = '{\n  "env": {}\n}\n';
-const CODEX_DEFAULT = '';
-const OPENCODE_DEFAULT = '{\n  "$schema": "https://opencode.ai/config.json"\n}\n';
-
-export async function readAgentsState(providers: ProviderConfig[]): Promise<AgentsState> {
+export async function readAgentsState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<AgentsState> {
   const [claude, codex, opencode] = await Promise.all([
-    readClaudeState(providers),
-    readCodexState(providers),
-    readOpencodeState(providers)
+    readClaudeState(context, providers),
+    readCodexState(context, providers),
+    readOpencodeState(context, providers)
   ]);
   return { claude, codex, opencode };
 }
 
-export async function openAgentConfigFile(agent: 'claude' | 'codex' | 'opencode'): Promise<string> {
-  const filePath = getAgentConfigPath(agent);
-  const defaults = agent === 'claude' ? CLAUDE_DEFAULT : agent === 'codex' ? CODEX_DEFAULT : OPENCODE_DEFAULT;
-  await ensureFile(filePath, defaults);
+export async function openAgentConfigFiles(context: vscode.ExtensionContext, agent: 'claude' | 'codex' | 'opencode'): Promise<string[]> {
+  if (agent === 'codex') {
+    const filePaths = [getAgentConfigPath(context, 'codex'), getCodexAuthConfigPath(context)];
+    await Promise.all(filePaths.map((filePath) => requireExistingConfigFile(filePath)));
+    return filePaths;
+  }
+
+  const filePath = getAgentConfigPath(context, agent);
+  await requireExistingConfigFile(filePath);
+  return [filePath];
+}
+
+export async function openConfigPath(context: vscode.ExtensionContext, target: ConfigPathTarget): Promise<string> {
+  const filePath = getConfigPath(context, target);
+  await requireExistingConfigFile(filePath);
   return filePath;
 }
 
-export async function saveClaudeConfig(providers: ProviderConfig[], payload: SaveClaudePayload): Promise<void> {
+export async function saveClaudeConfig(context: vscode.ExtensionContext, providers: ProviderConfig[], payload: SaveClaudePayload): Promise<void> {
   const provider = findProvider(providers, payload.providerId, 'claude');
-  const filePath = getAgentConfigPath('claude');
-  const config = await readJsonConfig(filePath, { env: {} }, CLAUDE_DEFAULT);
+  const filePath = getAgentConfigPath(context, 'claude');
+  await requireExistingConfigFile(filePath);
+  const config = await readJsonConfig(filePath, { env: {} });
   const env = ensureObject(config, 'env');
 
   env.ANTHROPIC_BASE_URL = provider.claudeBaseUrl;
   env.ANTHROPIC_AUTH_TOKEN = provider.apiKey;
-  env.NODE_TLS_REJECT_UNAUTHORIZED = provider.sslCheck ? '1' : '0';
-  applyProxyEnv(env, provider);
 
   for (const key of CLAUDE_MODEL_KEYS) {
     const model = payload.models[key]?.trim();
     if (model) {
       env[key] = model;
+    } else {
+      delete env[key];
     }
   }
 
   await writeText(filePath, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-export async function saveCodexConfig(providers: ProviderConfig[], payload: SaveCodexPayload): Promise<void> {
+export async function saveCodexConfig(context: vscode.ExtensionContext, providers: ProviderConfig[], payload: SaveCodexPayload): Promise<void> {
   const provider = findProvider(providers, payload.providerId, 'codex');
   const model = payload.model.trim();
   if (!model) {
     throw new Error('请选择 Codex 模型。');
   }
 
-  const filePath = getAgentConfigPath('codex');
-  const config = await readTomlConfig(filePath, {}, CODEX_DEFAULT);
-  config.model_provider = provider.key;
+  const filePath = getAgentConfigPath(context, 'codex');
+  await requireExistingConfigFile(filePath);
+  const config = await readTomlConfig(filePath, {});
+  const authPath = getCodexAuthConfigPath(context);
+  const auth = await readJsonConfig(authPath, {});
+  const providerName = provider.name;
+  config.model_provider = providerName;
   config.model = model;
 
   const modelProviders = ensureObject(config, 'model_providers');
-  modelProviders[provider.key] = {
+  modelProviders[providerName] = {
     name: provider.name,
     base_url: provider.codexBaseUrl,
     wire_api: provider.codexWireApi
   };
 
+  auth.OPENAI_API_KEY = provider.apiKey;
+
   await writeText(filePath, `${TOML.stringify(config as never)}\n`);
+  await writeText(authPath, `${JSON.stringify(auth, null, 2)}\n`);
 }
 
-export async function saveOpencodeConfig(providers: ProviderConfig[], payload: SaveOpencodePayload): Promise<void> {
+export async function saveOpencodeConfig(context: vscode.ExtensionContext, providers: ProviderConfig[], payload: SaveOpencodePayload): Promise<void> {
   const provider = findProvider(providers, payload.providerId, 'opencode');
   const model = payload.model.trim();
   if (!model) {
     throw new Error('请选择 opencode 模型。');
   }
 
-  const filePath = getAgentConfigPath('opencode');
-  const config = await readJsonConfig(filePath, { $schema: 'https://opencode.ai/config.json' }, OPENCODE_DEFAULT);
+  const filePath = getAgentConfigPath(context, 'opencode');
+  await requireExistingConfigFile(filePath);
+  const config = await readJsonConfig(filePath, { $schema: 'https://opencode.ai/config.json' });
   if (!config.$schema) {
     config.$schema = 'https://opencode.ai/config.json';
   }
@@ -119,10 +135,12 @@ export async function saveOpencodeConfig(providers: ProviderConfig[], payload: S
   await writeText(filePath, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-async function readClaudeState(providers: ProviderConfig[]): Promise<ClaudeAgentState> {
-  const filePath = getAgentConfigPath('claude');
+async function readClaudeState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<ClaudeAgentState> {
+  const pathInfo = getAgentConfigPathInfo(context, 'claude');
+  const filePath = pathInfo.path;
   const exists = await fileExists(filePath);
   const baseState: ClaudeAgentState = {
+    ...pathInfo,
     path: filePath,
     exists,
     selectedProviderId: '',
@@ -132,7 +150,7 @@ async function readClaudeState(providers: ProviderConfig[]): Promise<ClaudeAgent
   };
 
   try {
-    const config = await readJsonConfig(filePath, { env: {} }, CLAUDE_DEFAULT, false);
+    const config = await readJsonConfig(filePath, { env: {} });
     const env = objectValue(config.env);
     const baseUrl = stringValue(env.ANTHROPIC_BASE_URL);
     const matched = providers.find((provider) => provider.claudeBaseUrl && sameUrl(provider.claudeBaseUrl, baseUrl));
@@ -153,39 +171,54 @@ async function readClaudeState(providers: ProviderConfig[]): Promise<ClaudeAgent
   }
 }
 
-async function readCodexState(providers: ProviderConfig[]): Promise<CodexAgentState> {
-  const filePath = getAgentConfigPath('codex');
+async function readCodexState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<CodexAgentState> {
+  const pathInfo = getAgentConfigPathInfo(context, 'codex');
+  const authPathInfo = getCodexAuthConfigPathInfo(context);
+  const filePath = pathInfo.path;
   const exists = await fileExists(filePath);
+  const authExists = await fileExists(authPathInfo.path);
   const baseState: CodexAgentState = {
+    ...pathInfo,
     path: filePath,
     exists,
     selectedProviderId: '',
     modelProvider: '',
+    providerName: '',
     providerBaseUrl: '',
     wireApi: '',
+    auth: {
+      ...authPathInfo,
+      path: authPathInfo.path,
+      exists: authExists
+    },
+    hasOpenAiApiKey: false,
     model: ''
   };
 
   try {
-    const config = await readTomlConfig(filePath, {}, CODEX_DEFAULT, false);
+    const config = await readTomlConfig(filePath, {});
     const modelProvider = stringValue(config.model_provider);
     const model = stringValue(config.model);
     const providerBlock = objectValue(objectValue(config.model_providers)[modelProvider]);
+    const providerName = stringValue(providerBlock.name);
     const providerBaseUrl = stringValue(providerBlock.base_url);
     const wireApi = stringValue(providerBlock.wire_api);
+    const auth = await readJsonConfig(authPathInfo.path, {});
     const matched = providers.find((provider) => {
       if (!provider.codexBaseUrl) {
         return false;
       }
-      return provider.key === modelProvider || sameUrl(provider.codexBaseUrl, providerBaseUrl);
+      return provider.name === modelProvider || provider.key === modelProvider || sameUrl(provider.codexBaseUrl, providerBaseUrl);
     });
 
     return {
       ...baseState,
       selectedProviderId: matched?.id ?? '',
       modelProvider,
+      providerName,
       providerBaseUrl,
       wireApi,
+      hasOpenAiApiKey: Boolean(stringValue(auth.OPENAI_API_KEY)),
       model
     };
   } catch (error) {
@@ -196,26 +229,34 @@ async function readCodexState(providers: ProviderConfig[]): Promise<CodexAgentSt
   }
 }
 
-async function readOpencodeState(providers: ProviderConfig[]): Promise<OpencodeAgentState> {
-  const filePath = getAgentConfigPath('opencode');
+async function readOpencodeState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<OpencodeAgentState> {
+  const pathInfo = getAgentConfigPathInfo(context, 'opencode');
+  const filePath = pathInfo.path;
   const exists = await fileExists(filePath);
   const baseState: OpencodeAgentState = {
+    ...pathInfo,
     path: filePath,
     exists,
     selectedProviderId: '',
     providerKey: '',
+    providerName: '',
+    providerNpm: '',
     providerBaseUrl: '',
+    hasProviderApiKey: false,
+    providerModelCount: 0,
     model: ''
   };
 
   try {
-    const config = await readJsonConfig(filePath, { $schema: 'https://opencode.ai/config.json' }, OPENCODE_DEFAULT, false);
+    const config = await readJsonConfig(filePath, { $schema: 'https://opencode.ai/config.json' });
     const fullModel = stringValue(config.model);
     const slashIndex = fullModel.indexOf('/');
     const providerKey = slashIndex > 0 ? fullModel.slice(0, slashIndex) : '';
     const model = slashIndex > 0 ? fullModel.slice(slashIndex + 1) : fullModel;
     const providerBlock = objectValue(objectValue(config.provider)[providerKey]);
-    const providerBaseUrl = stringValue(objectValue(providerBlock.options).baseURL);
+    const providerOptions = objectValue(providerBlock.options);
+    const providerBaseUrl = stringValue(providerOptions.baseURL);
+    const providerModels = objectValue(providerBlock.models);
     const matched = providers.find((provider) => {
       if (!provider.opencodeBaseUrl) {
         return false;
@@ -227,7 +268,11 @@ async function readOpencodeState(providers: ProviderConfig[]): Promise<OpencodeA
       ...baseState,
       selectedProviderId: matched?.id ?? '',
       providerKey,
+      providerName: stringValue(providerBlock.name),
+      providerNpm: stringValue(providerBlock.npm),
       providerBaseUrl,
+      hasProviderApiKey: Boolean(stringValue(providerOptions.apiKey)),
+      providerModelCount: Object.keys(providerModels).length,
       model
     };
   } catch (error) {
@@ -238,10 +283,7 @@ async function readOpencodeState(providers: ProviderConfig[]): Promise<OpencodeA
   }
 }
 
-async function readJsonConfig(filePath: string, fallback: JsonObject, defaultText: string, createIfMissing = true): Promise<JsonObject> {
-  if (createIfMissing) {
-    await ensureFile(filePath, defaultText);
-  }
+async function readJsonConfig(filePath: string, fallback: JsonObject): Promise<JsonObject> {
   const text = await readTextIfExists(filePath);
   if (!text.trim()) {
     return { ...fallback };
@@ -259,10 +301,7 @@ async function readJsonConfig(filePath: string, fallback: JsonObject, defaultTex
   return parsed as JsonObject;
 }
 
-async function readTomlConfig(filePath: string, fallback: JsonObject, defaultText: string, createIfMissing = true): Promise<JsonObject> {
-  if (createIfMissing) {
-    await ensureFile(filePath, defaultText);
-  }
+async function readTomlConfig(filePath: string, fallback: JsonObject): Promise<JsonObject> {
   const text = await readTextIfExists(filePath);
   if (!text.trim()) {
     return { ...fallback };
@@ -275,18 +314,6 @@ async function readTomlConfig(filePath: string, fallback: JsonObject, defaultTex
   return parsed as JsonObject;
 }
 
-function applyProxyEnv(env: JsonObject, provider: ProviderConfig): void {
-  const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'];
-  for (const key of proxyKeys) {
-    delete env[key];
-  }
-
-  if (provider.proxyMode === 'custom' && provider.customProxyUrl) {
-    env.HTTP_PROXY = provider.customProxyUrl;
-    env.HTTPS_PROXY = provider.customProxyUrl;
-  }
-}
-
 function ensureObject(parent: JsonObject, key: string): JsonObject {
   const current = parent[key];
   if (!current || typeof current !== 'object' || Array.isArray(current)) {
@@ -295,12 +322,10 @@ function ensureObject(parent: JsonObject, key: string): JsonObject {
   return parent[key] as JsonObject;
 }
 
-async function ensureFile(filePath: string, defaultText: string): Promise<void> {
-  if (await fileExists(filePath)) {
-    return;
+async function requireExistingConfigFile(filePath: string): Promise<void> {
+  if (!(await fileExists(filePath))) {
+    throw new Error(`配置文件不存在：${filePath}`);
   }
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, defaultText, 'utf8');
 }
 
 async function readTextIfExists(filePath: string): Promise<string> {
@@ -315,7 +340,6 @@ async function readTextIfExists(filePath: string): Promise<string> {
 }
 
 async function writeText(filePath: string, text: string): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, text, 'utf8');
 }
 

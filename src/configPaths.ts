@@ -3,18 +3,85 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { AgentName } from './types';
 
-const CONFIG_SECTION = 'llmSwitch';
+const AGENT_CONFIG_PATHS_KEY = 'agentConfigPaths';
 
-export function getAgentConfigPath(agent: AgentName): string {
-  const configured = vscode.workspace
-    .getConfiguration(CONFIG_SECTION)
-    .get<string>(`${agent}.configPath`, '')
-    .trim();
+export type ConfigPathTarget = AgentName | 'codexAuth';
 
-  if (configured.length > 0) {
-    return expandPath(configured);
+type AgentConfigPathMap = Partial<Record<ConfigPathTarget, string>>;
+
+export interface AgentConfigPathInfo {
+  path: string;
+  defaultPath: string;
+  customPath: string;
+  usesDefaultPath: boolean;
+}
+
+export function getAgentConfigPathInfo(context: vscode.ExtensionContext, agent: AgentName): AgentConfigPathInfo {
+  return getConfigPathInfo(context, agent);
+}
+
+export function getCodexAuthConfigPathInfo(context: vscode.ExtensionContext): AgentConfigPathInfo {
+  return getConfigPathInfo(context, 'codexAuth');
+}
+
+export function getConfigPathInfo(context: vscode.ExtensionContext, target: ConfigPathTarget): AgentConfigPathInfo {
+  const paths = context.globalState.get<AgentConfigPathMap>(AGENT_CONFIG_PATHS_KEY, {});
+  const customPath = typeof paths[target] === 'string' ? paths[target].trim() : '';
+  const defaultPath = getDefaultConfigPath(context, target);
+
+  if (customPath) {
+    return {
+      path: expandPath(customPath),
+      defaultPath,
+      customPath,
+      usesDefaultPath: false
+    };
   }
 
+  return {
+    path: defaultPath,
+    defaultPath,
+    customPath: '',
+    usesDefaultPath: true
+  };
+}
+
+export function getAgentConfigPath(context: vscode.ExtensionContext, agent: AgentName): string {
+  return getAgentConfigPathInfo(context, agent).path;
+}
+
+export function getCodexAuthConfigPath(context: vscode.ExtensionContext): string {
+  return getCodexAuthConfigPathInfo(context).path;
+}
+
+export function getConfigPath(context: vscode.ExtensionContext, target: ConfigPathTarget): string {
+  return getConfigPathInfo(context, target).path;
+}
+
+export async function setAgentConfigPath(context: vscode.ExtensionContext, target: ConfigPathTarget, configPath: string): Promise<void> {
+  const paths = context.globalState.get<AgentConfigPathMap>(AGENT_CONFIG_PATHS_KEY, {});
+  const trimmed = configPath.trim();
+  const next: AgentConfigPathMap = { ...paths };
+  if (trimmed) {
+    next[target] = trimmed;
+  } else {
+    delete next[target];
+  }
+  await context.globalState.update(AGENT_CONFIG_PATHS_KEY, next);
+}
+
+export async function resetAgentConfigPath(context: vscode.ExtensionContext, target: ConfigPathTarget): Promise<void> {
+  await setAgentConfigPath(context, target, '');
+}
+
+function getDefaultConfigPath(context: vscode.ExtensionContext, target: ConfigPathTarget): string {
+  if (target === 'codexAuth') {
+    return path.join(path.dirname(getAgentConfigPath(context, 'codex')), 'auth.json');
+  }
+  return getDefaultAgentConfigPath(target);
+}
+
+function getDefaultAgentConfigPath(agent: AgentName): string {
   const home = os.homedir();
   if (agent === 'claude') {
     return path.join(home, '.claude', 'settings.json');

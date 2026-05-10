@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { CodexWireApi, ProviderConfig, ProxyMode } from './types';
 
 const PROVIDERS_KEY = 'providers';
+const PROVIDER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const PROVIDER_NAME_ERROR = 'Provider 名称只能包含英文字母、数字、下划线和中划线，长度 1-64，且必须以字母或数字开头。';
 
 interface ProviderInput {
   id?: string;
@@ -64,6 +66,12 @@ export async function upsertProvider(context: vscode.ExtensionContext, input: Pr
   if (!name) {
     throw new Error('Provider 名称必填。');
   }
+  if (!isValidProviderName(name)) {
+    throw new Error(PROVIDER_NAME_ERROR);
+  }
+  if (providers.some((provider) => provider.id !== input.id && sameProviderName(provider.name, name))) {
+    throw new Error('Provider 名称不能重复。');
+  }
 
   const proxyMode = normalizeProxyMode(input.proxyMode);
   const customProxyUrl = stringValue(input.customProxyUrl).trim();
@@ -79,7 +87,7 @@ export async function upsertProvider(context: vscode.ExtensionContext, input: Pr
     name,
     apiKey: stringValue(input.apiKey),
     proxyMode,
-    customProxyUrl,
+    customProxyUrl: proxyMode === 'custom' ? customProxyUrl : '',
     sslCheck: typeof input.sslCheck === 'boolean' ? input.sslCheck : false,
     models: normalizeModels(input.models),
     claudeBaseUrl: stringValue(input.claudeBaseUrl).trim(),
@@ -101,6 +109,28 @@ export async function deleteProvider(context: vscode.ExtensionContext, id: strin
   const providers = loadProviders(context).filter((provider) => provider.id !== id);
   await saveProviders(context, providers);
   return providers;
+}
+
+export async function reorderProviders(context: vscode.ExtensionContext, orderedIds: string[]): Promise<ProviderConfig[]> {
+  const providers = loadProviders(context);
+  const byId = new Map(providers.map((provider) => [provider.id, provider]));
+  const reordered: ProviderConfig[] = [];
+
+  for (const id of orderedIds) {
+    const provider = byId.get(id);
+    if (provider && !reordered.includes(provider)) {
+      reordered.push(provider);
+    }
+  }
+
+  for (const provider of providers) {
+    if (!reordered.includes(provider)) {
+      reordered.push(provider);
+    }
+  }
+
+  await saveProviders(context, reordered);
+  return reordered;
 }
 
 export function findProvider(providers: ProviderConfig[], providerId: string, agent: 'claude' | 'codex' | 'opencode'): ProviderConfig {
@@ -140,6 +170,14 @@ function slugProviderKey(name: string): string {
     .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug || 'provider';
+}
+
+function sameProviderName(left: string, right: string): boolean {
+  return left.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase();
+}
+
+function isValidProviderName(name: string): boolean {
+  return PROVIDER_NAME_PATTERN.test(name);
 }
 
 function normalizeModels(value: unknown): string[] {

@@ -26,26 +26,6 @@
     "test": "npm run compile"
   },
   "contributes": {
-    "configuration": {
-      "title": "LLM-Switch",
-      "properties": {
-        "llmSwitch.claude.configPath": {
-          "type": "string",
-          "default": "",
-          "description": "Claude settings.json path. Leave empty to use the platform default."
-        },
-        "llmSwitch.codex.configPath": {
-          "type": "string",
-          "default": "",
-          "description": "Codex config.toml path. Leave empty to use the platform default."
-        },
-        "llmSwitch.opencode.configPath": {
-          "type": "string",
-          "default": "",
-          "description": "opencode opencode.json path. Leave empty to use the platform default."
-        }
-      }
-    },
     "commands": [
       {
         "command": "llm-switch.openManager",

@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import {
-  openAgentConfigFile,
+  openAgentConfigFiles,
+  openConfigPath,
   readAgentsState,
   saveClaudeConfig,
   saveCodexConfig,
   saveOpencodeConfig
 } from './agentConfigs';
-import { deleteProvider, loadProviders, upsertProvider } from './providerStore';
+import { ConfigPathTarget, resetAgentConfigPath, setAgentConfigPath } from './configPaths';
+import { deleteProvider, loadProviders, reorderProviders, upsertProvider } from './providerStore';
 import { getManagerHtml } from './webview';
 import { AgentName, WebviewState } from './types';
 
@@ -20,9 +22,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('llm-switch.openManager', () => manager.openPanel()),
-    vscode.commands.registerCommand('llm-switch.openClaudeConfig', () => openConfigInEditor('claude')),
-    vscode.commands.registerCommand('llm-switch.openCodexConfig', () => openConfigInEditor('codex')),
-    vscode.commands.registerCommand('llm-switch.openOpencodeConfig', () => openConfigInEditor('opencode'))
+    vscode.commands.registerCommand('llm-switch.openClaudeConfig', () => openConfigInEditor(context, 'claude')),
+    vscode.commands.registerCommand('llm-switch.openCodexConfig', () => openConfigInEditor(context, 'codex')),
+    vscode.commands.registerCommand('llm-switch.openOpencodeConfig', () => openConfigInEditor(context, 'opencode'))
   );
 }
 
@@ -36,11 +38,15 @@ class LlmSwitchManager {
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
 
-  public openPanel(): void {
+  public async openPanel(): Promise<void> {
     if (this.panel) {
-      this.panel.reveal(vscode.ViewColumn.One);
-      void this.postState(this.panel.webview);
-      return;
+      try {
+        this.panel.reveal(vscode.ViewColumn.One);
+        await this.postState(this.panel.webview);
+        return;
+      } catch {
+        this.panel = undefined;
+      }
     }
 
     const panel = vscode.window.createWebviewPanel(
@@ -58,7 +64,9 @@ class LlmSwitchManager {
     this.configureWebview(panel.webview, disposables);
     panel.onDidDispose(() => {
       this.webviews.delete(panel.webview);
-      this.panel = undefined;
+      if (this.panel === panel) {
+        this.panel = undefined;
+      }
       while (disposables.length > 0) {
         disposables.pop()?.dispose();
       }
@@ -83,28 +91,50 @@ class LlmSwitchManager {
         case 'refresh':
           await this.postState(webview);
           return;
+        case 'toast':
+          await showToast(
+            stringField(message.payload, 'level'),
+            stringField(message.payload, 'message')
+          );
+          return;
         case 'saveProvider':
           await upsertProvider(this.context, asRecord(message.payload));
-          await this.broadcastState('Provider 已保存。');
+          await this.broadcastState();
           return;
         case 'deleteProvider':
           await deleteProvider(this.context, stringField(message.payload, 'id'));
-          await this.broadcastState('Provider 已删除。');
+          await this.broadcastState();
+          return;
+        case 'reorderProviders':
+          await reorderProviders(this.context, stringArrayField(message.payload, 'orderedIds'));
+          await this.broadcastState();
+          return;
+        case 'saveAgentConfigPath':
+          await setAgentConfigPath(this.context, configPathTargetFromPayload(message.payload), stringField(message.payload, 'path'));
+          await this.broadcastState();
+          return;
+        case 'resetAgentConfigPath':
+          await resetAgentConfigPath(this.context, configPathTargetFromPayload(message.payload));
+          await this.broadcastState();
           return;
         case 'saveClaude':
-          await saveClaudeConfig(loadProviders(this.context), asRecord(message.payload) as never);
-          await this.broadcastState('Claude 配置已更新。');
+          await saveClaudeConfig(this.context, loadProviders(this.context), asRecord(message.payload) as never);
+          await this.broadcastState();
           return;
         case 'saveCodex':
-          await saveCodexConfig(loadProviders(this.context), asRecord(message.payload) as never);
-          await this.broadcastState('Codex 配置已更新。');
+          await saveCodexConfig(this.context, loadProviders(this.context), asRecord(message.payload) as never);
+          await this.broadcastState();
           return;
         case 'saveOpencode':
-          await saveOpencodeConfig(loadProviders(this.context), asRecord(message.payload) as never);
-          await this.broadcastState('opencode 配置已更新。');
+          await saveOpencodeConfig(this.context, loadProviders(this.context), asRecord(message.payload) as never);
+          await this.broadcastState();
           return;
         case 'openConfig':
-          await openConfigInEditor(assertAgentName(stringField(message.payload, 'agent')));
+          await openConfigInEditor(this.context, assertAgentName(stringField(message.payload, 'agent')));
+          await this.postState(webview);
+          return;
+        case 'openConfigPath':
+          await openConfigPathInEditor(this.context, configPathTargetFromPayload(message.payload));
           await this.postState(webview);
           return;
         default:
@@ -119,7 +149,7 @@ class LlmSwitchManager {
 
   private async getState(): Promise<WebviewState> {
     const providers = loadProviders(this.context);
-    const agents = await readAgentsState(providers);
+    const agents = await readAgentsState(this.context, providers);
     return { providers, agents };
   }
 
@@ -127,19 +157,44 @@ class LlmSwitchManager {
     await webview.postMessage({ type: 'state', state: await this.getState() });
   }
 
-  private async broadcastState(message?: string): Promise<void> {
+  private async broadcastState(): Promise<void> {
     const state = await this.getState();
     await Promise.all(Array.from(this.webviews).map(async (webview) => {
-      await webview.postMessage({ type: 'state', state });
-      if (message) {
-        await webview.postMessage({ type: 'notice', message });
+      try {
+        await webview.postMessage({ type: 'state', state });
+      } catch {
+        this.webviews.delete(webview);
       }
     }));
   }
+
 }
 
-async function openConfigInEditor(agent: AgentName): Promise<void> {
-  const filePath = await openAgentConfigFile(agent);
+async function showToast(level: string, message: string): Promise<void> {
+  if (!message) {
+    return;
+  }
+  if (level === 'warning') {
+    await vscode.window.showWarningMessage(message);
+    return;
+  }
+  if (level === 'info') {
+    await vscode.window.showInformationMessage(message);
+    return;
+  }
+  await vscode.window.showErrorMessage(message);
+}
+
+async function openConfigInEditor(context: vscode.ExtensionContext, agent: AgentName): Promise<void> {
+  const filePaths = await openAgentConfigFiles(context, agent);
+  for (const filePath of filePaths) {
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+    await vscode.window.showTextDocument(document, { preview: false });
+  }
+}
+
+async function openConfigPathInEditor(context: vscode.ExtensionContext, target: ConfigPathTarget): Promise<void> {
+  const filePath = await openConfigPath(context, target);
   const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
   await vscode.window.showTextDocument(document, { preview: false });
 }
@@ -149,6 +204,19 @@ function assertAgentName(value: string): AgentName {
     return value;
   }
   throw new Error('未知 Agent。');
+}
+
+function configPathTargetFromPayload(payload: unknown): ConfigPathTarget {
+  const record = asRecord(payload);
+  const target = typeof record.target === 'string' ? record.target : stringField(record, 'agent');
+  return assertConfigPathTarget(target);
+}
+
+function assertConfigPathTarget(value: string): ConfigPathTarget {
+  if (value === 'claude' || value === 'codex' || value === 'codexAuth' || value === 'opencode') {
+    return value;
+  }
+  throw new Error('未知配置路径。');
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -161,4 +229,10 @@ function asRecord(value: unknown): Record<string, unknown> {
 function stringField(value: unknown, key: string): string {
   const record = asRecord(value);
   return typeof record[key] === 'string' ? record[key] : '';
+}
+
+function stringArrayField(value: unknown, key: string): string[] {
+  const record = asRecord(value);
+  const raw = record[key];
+  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : [];
 }
