@@ -570,6 +570,100 @@ export function getManagerHtml(webview: vscode.Webview): string {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .search-select {
+      position: relative;
+      width: 100%;
+      min-width: 0;
+    }
+    .model-search-select {
+      width: min(100%, 560px);
+      max-width: 100%;
+    }
+    .search-select-button {
+      width: 100%;
+      min-height: 30px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border: 1px solid var(--vscode-input-border, transparent);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      text-align: left;
+    }
+    .search-select-button:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .search-select-value,
+    .search-select-option-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .search-select-caret {
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+    }
+    .search-select-popover {
+      position: absolute;
+      z-index: 18;
+      top: calc(100% + 4px);
+      left: 0;
+      width: 100%;
+      max-height: 280px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      border-radius: 5px;
+      background: var(--vscode-dropdown-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+      color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    }
+    .search-select-input {
+      min-height: 28px;
+      padding: 5px 7px;
+    }
+    .search-select-list {
+      min-height: 0;
+      max-height: 220px;
+      overflow: auto;
+      display: grid;
+      gap: 2px;
+    }
+    .search-select-option {
+      width: 100%;
+      min-height: 28px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 7px;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+      text-align: left;
+    }
+    .search-select-option:hover,
+    .search-select-option.active {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .search-select-option.selected {
+      background: var(--vscode-list-activeSelectionBackground);
+      color: var(--vscode-list-activeSelectionForeground);
+    }
+    .search-select-check {
+      color: currentColor;
+      font-weight: 650;
+    }
+    .search-select-empty {
+      padding: 8px 7px;
+      color: var(--vscode-descriptionForeground);
+    }
     .summary {
       display: grid;
       gap: 8px;
@@ -840,6 +934,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       let deleteConfirmId = null;
       let draggedProviderId = null;
       let dragOverProviderId = null;
+      let searchSelectState = null;
 
       window.addEventListener('message', function (event) {
         const message = event.data;
@@ -865,17 +960,38 @@ export function getManagerHtml(webview: vscode.Webview): string {
       document.addEventListener('click', function (event) {
         const button = event.target.closest('[data-action]');
         if (!button) {
+          if (searchSelectState && !event.target.closest('[data-search-select-root]')) {
+            searchSelectState = null;
+            render();
+          }
           return;
         }
         const action = button.getAttribute('data-action');
+        if (action === 'search-select-open') {
+          const selectId = button.getAttribute('data-select-id') || '';
+          searchSelectState = searchSelectState && searchSelectState.id === selectId ? null : { id: selectId, query: '' };
+          render();
+          if (searchSelectState) {
+            focusSearchSelect(selectId);
+          }
+          return;
+        }
+        if (action === 'search-select-option') {
+          applySearchSelectValue(button.getAttribute('data-select-id') || '', button.getAttribute('data-select-value') || '');
+          searchSelectState = null;
+          render();
+          return;
+        }
         if (action === 'tab') {
           activeTab = button.getAttribute('data-tab') || 'providers';
           providerModal = null;
           modelPicker = null;
+          searchSelectState = null;
           render();
         }
         if (action === 'agent-tab') {
           activeAgentTab = button.getAttribute('data-agent-tab') || 'claude';
+          searchSelectState = null;
           render();
         }
         if (action === 'refresh') {
@@ -883,10 +999,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (action === 'provider-new') {
           deleteConfirmId = null;
+          searchSelectState = null;
           openProviderModal();
         }
         if (action === 'provider-edit') {
           deleteConfirmId = null;
+          searchSelectState = null;
           openProviderModal(button.getAttribute('data-provider-id') || '');
         }
         if (action === 'provider-modal-close') {
@@ -1018,6 +1136,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       document.addEventListener('input', function (event) {
         const target = event.target;
+        if (target && target.dataset && target.dataset.searchSelectQuery) {
+          searchSelectState = { id: target.dataset.searchSelectQuery, query: target.value };
+          updateSearchSelectFilter(target);
+          return;
+        }
         if (target && target.id === 'modelPickerSearch') {
           updateModelPickerDom();
         }
@@ -1031,6 +1154,25 @@ export function getManagerHtml(webview: vscode.Webview): string {
       });
 
       document.addEventListener('keydown', function (event) {
+        const target = event.target;
+        if (target && target.dataset && target.dataset.searchSelectQuery) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            chooseFirstVisibleSearchOption(target);
+            return;
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            searchSelectState = null;
+            render();
+            return;
+          }
+        }
+        if (event.key === 'Escape' && searchSelectState) {
+          searchSelectState = null;
+          render();
+          return;
+        }
         if (event.key === 'Escape' && modelPicker) {
           updateProviderModalDraftFromForm();
           modelPicker = null;
@@ -1042,7 +1184,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
           modelFetchBusy = false;
           render();
         }
-        const target = event.target;
         if (event.key === 'Enter' && target && target.dataset && target.dataset.configPathTarget) {
           event.preventDefault();
           target.blur();
@@ -1627,6 +1768,96 @@ export function getManagerHtml(webview: vscode.Webview): string {
         });
       }
 
+      function applySearchSelectValue(id, nextValue) {
+        const selectedValue = String(nextValue || '');
+        const element = document.getElementById(id);
+        if (element) {
+          element.value = selectedValue;
+        }
+        if (id === 'claudeProviderSelect') {
+          drafts.claudeProviderId = selectedValue;
+          drafts.claudeModels = {};
+          return;
+        }
+        if (id.indexOf('claudeModel_') === 0) {
+          drafts.claudeModels[id.slice('claudeModel_'.length)] = selectedValue;
+          return;
+        }
+        if (id === 'codexProviderSelect') {
+          drafts.codexProviderId = selectedValue;
+          drafts.codexModel = null;
+          return;
+        }
+        if (id === 'codexModel') {
+          drafts.codexModel = selectedValue;
+          return;
+        }
+        if (id === 'opencodeProviderSelect') {
+          drafts.opencodeProviderId = selectedValue;
+          drafts.opencodeModel = null;
+          return;
+        }
+        if (id === 'opencodeModel') {
+          drafts.opencodeModel = selectedValue;
+        }
+      }
+
+      function focusSearchSelect(id) {
+        setTimeout(function () {
+          const inputs = document.querySelectorAll('[data-search-select-query]');
+          for (let index = 0; index < inputs.length; index += 1) {
+            const input = inputs[index];
+            if (input.getAttribute('data-search-select-query') === id) {
+              input.focus();
+              input.select();
+              return;
+            }
+          }
+        }, 0);
+      }
+
+      function updateSearchSelectFilter(input) {
+        const root = input.closest('[data-search-select-root]');
+        if (!root) {
+          return;
+        }
+        const query = String(input.value || '').trim().toLocaleLowerCase();
+        let visibleCount = 0;
+        root.querySelectorAll('[data-search-select-option]').forEach(function (option) {
+          const text = option.getAttribute('data-search-select-text') || '';
+          const visible = !query || text.indexOf(query) >= 0;
+          option.hidden = !visible;
+          option.classList.remove('active');
+          if (visible) {
+            visibleCount += 1;
+            if (visibleCount === 1) {
+              option.classList.add('active');
+            }
+          }
+        });
+        const empty = root.querySelector('[data-search-select-empty]');
+        if (empty) {
+          empty.hidden = visibleCount > 0;
+        }
+      }
+
+      function chooseFirstVisibleSearchOption(input) {
+        const root = input.closest('[data-search-select-root]');
+        if (!root) {
+          return;
+        }
+        const options = root.querySelectorAll('[data-search-select-option]');
+        for (let index = 0; index < options.length; index += 1) {
+          const option = options[index];
+          if (!option.hidden) {
+            applySearchSelectValue(option.getAttribute('data-select-id') || '', option.getAttribute('data-select-value') || '');
+            searchSelectState = null;
+            render();
+            return;
+          }
+        }
+      }
+
       function sameProviderName(left, right) {
         return String(left || '').trim().toLocaleLowerCase() === String(right || '').trim().toLocaleLowerCase();
       }
@@ -1682,7 +1913,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const options = [['', placeholder]].concat(providers.map(function (provider) {
           return [provider.id, provider.name];
         }));
-        return field('Provider', select(id, options, selectedId));
+        return field('Provider', searchSelect(id, options, selectedId, false, 'provider-search-select', '搜索 Provider'));
       }
 
       function renderParseNotice(agent) {
@@ -1858,9 +2089,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (!options.length) {
           options.push(['', '未配置']);
         }
-        return select(id, options.map(function (option) {
+        return searchSelect(id, options.map(function (option) {
           return [option[0], truncateModelOption(option[1]), option[1]];
-        }), currentValue, disabled, 'model-select');
+        }), currentValue, disabled, 'model-search-select', '搜索模型');
       }
 
       function currentModelForSelection(provider, selectedId, currentProviderId, current) {
@@ -1979,6 +2210,54 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.7 5.1A11 11 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-2.1 3.2"></path><path d="M6.6 6.6C3.2 8.8 2 12 2 12s3 7 10 7a10.8 10.8 0 0 0 4.4-.9"></path><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"></path><path d="M3 3l18 18"></path></svg>';
         }
         return '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+      }
+
+      function searchSelect(id, options, selected, disabled, className, searchPlaceholder) {
+        const selectedValue = selected === undefined || selected === null ? '' : String(selected);
+        const currentOption = options.find(function (option) { return String(option[0]) === selectedValue; }) || options[0] || ['', '未配置'];
+        const currentLabel = currentOption[1] || '未配置';
+        const currentTitle = currentOption[2] || currentLabel;
+        const open = Boolean(searchSelectState && searchSelectState.id === id && !disabled);
+        const query = open ? String(searchSelectState.query || '') : '';
+        const normalizedQuery = query.trim().toLocaleLowerCase();
+        let visibleCount = 0;
+        const optionHtml = options.map(function (option, index) {
+          const optionValue = String(option[0]);
+          const optionLabel = String(option[1] || '');
+          const optionTitle = String(option[2] || optionLabel);
+          const searchText = searchSelectText(option);
+          const visible = !normalizedQuery || searchText.indexOf(normalizedQuery) >= 0;
+          if (visible) {
+            visibleCount += 1;
+          }
+          return '<button type="button" class="search-select-option ' + (optionValue === selectedValue ? 'selected' : '') + (visibleCount === 1 && visible ? ' active' : '') + '" ' +
+            'data-action="search-select-option" data-select-id="' + attr(id) + '" data-select-value="' + attr(optionValue) + '" data-search-select-option="1" data-search-select-text="' + attr(searchText) + '" ' +
+            (visible ? '' : 'hidden ') + 'title="' + attr(optionTitle) + '">' +
+              '<span class="search-select-option-text">' + h(optionLabel) + '</span>' +
+              (optionValue === selectedValue ? '<span class="search-select-check" aria-hidden="true">✓</span>' : '<span></span>') +
+            '</button>';
+        }).join('');
+        return '<div class="search-select ' + h(className || '') + '" data-search-select-root="' + attr(id) + '">' +
+          '<input type="hidden" id="' + attr(id) + '" value="' + attr(selectedValue) + '">' +
+          '<button type="button" class="search-select-button" data-action="search-select-open" data-select-id="' + attr(id) + '" ' + (disabled ? 'disabled ' : '') +
+            'aria-expanded="' + (open ? 'true' : 'false') + '" title="' + attr(currentTitle) + '">' +
+            '<span class="search-select-value">' + h(currentLabel) + '</span>' +
+            '<span class="search-select-caret" aria-hidden="true">⌄</span>' +
+          '</button>' +
+          (open ? '<div class="search-select-popover">' +
+            '<input class="search-select-input" data-search-select-query="' + attr(id) + '" value="' + attr(query) + '" placeholder="' + attr(searchPlaceholder || '搜索') + '" autocomplete="off" spellcheck="false">' +
+            '<div class="search-select-list">' +
+              optionHtml +
+              '<div class="search-select-empty" data-search-select-empty="1" ' + (visibleCount ? 'hidden' : '') + '>没有匹配项</div>' +
+            '</div>' +
+          '</div>' : '') +
+        '</div>';
+      }
+
+      function searchSelectText(option) {
+        return [option[0], option[1], option[2] || ''].map(function (item) {
+          return String(item || '').toLocaleLowerCase();
+        }).join(' ');
       }
 
       function select(id, options, selected, disabled, className) {
