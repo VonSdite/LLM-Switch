@@ -1196,7 +1196,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
               '<div class="section">' +
                 '<h3 class="section-title">基础信息</h3>' +
                 '<div class="grid">' +
-                  fieldWithHelp('Provider 名称 *', providerNameRule, '<input id="providerName" value="' + attr(selected.name) + '" placeholder="例如 cpa666" maxlength="64" autocomplete="off" spellcheck="false">') +
+                  fieldWithHelp('Provider 名称 *', providerNameRule, '<input id="providerName" value="' + attr(selected.name) + '" placeholder="例如 proxy" maxlength="64" autocomplete="off" spellcheck="false">') +
                   field('API key（可留空）', '<div class="input-with-action"><input id="providerApiKey" type="password" value="' + attr(selected.apiKey) + '" autocomplete="off"><button type="button" class="input-action-button" data-action="provider-api-key-toggle" title="显示 API key" aria-label="显示 API key">' + icon('eye') + '</button></div>') +
                 '</div>' +
               '</div>' +
