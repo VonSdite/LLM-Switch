@@ -741,6 +741,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
     .fetched-model-row:hover {
       background: var(--vscode-list-hoverBackground);
     }
+    .fetched-model-row[data-model-name] {
+      cursor: pointer;
+    }
     .fetched-model-row input {
       width: auto;
       min-height: auto;
@@ -945,6 +948,19 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
       });
 
+      document.addEventListener('click', function (event) {
+        const row = event.target.closest('[data-fetched-model-row]');
+        if (!row || !modelPicker) {
+          return;
+        }
+        const model = row.getAttribute('data-model-name') || '';
+        if (!model) {
+          return;
+        }
+        modelPicker.selected[model] = !modelPicker.selected[model];
+        updateModelPickerDom();
+      });
+
       document.addEventListener('change', function (event) {
         const target = event.target;
         if (!target) {
@@ -956,7 +972,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (target.dataset && target.dataset.modelPickerModel) {
           if (modelPicker) {
-            modelPicker.selected[target.dataset.modelPickerModel] = target.checked;
             updateModelPickerDom();
           }
           return;
