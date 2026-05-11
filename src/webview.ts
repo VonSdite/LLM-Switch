@@ -1342,7 +1342,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
         return '<section class="agent-panel">' +
           renderConfigPath('codex', 'Codex config.toml', agent) +
-          renderConfigPath('codexAuth', 'Codex auth.json', agent.auth) +
+          renderConfigPath('codexAuth', 'Codex auth.json', agent.auth, true) +
           notices +
           renderProviderSelect('codexProviderSelect', providers, selectedId, '选择 Codex Provider') +
           '<div class="form">' +
@@ -1635,7 +1635,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(String(name || '').trim());
       }
 
-      function renderConfigPath(target, label, configPath) {
+      function renderConfigPath(target, label, configPath, hideMissingNotice) {
         const inputId = target + 'ConfigPath';
         const inputValue = configPath.customPath || configPath.path;
         return '<div class="path-editor">' +
@@ -1647,7 +1647,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
             '</div>' +
           '</div>' +
         '</div>' +
-        (!configPath.exists ? '<div class="notice">配置文件尚不存在，请先创建该文件后再打开或应用配置。</div>' : '');
+        (!hideMissingNotice && !configPath.exists ? '<div class="notice">配置文件尚不存在，请先创建该文件后再打开或应用配置。</div>' : '');
       }
 
       function saveAgentConfigPath(target) {

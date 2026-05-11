@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import * as TOML from '@iarna/toml';
 import * as vscode from 'vscode';
 import { parse as parseJsonc, ParseError, printParseErrorCode } from 'jsonc-parser';
@@ -358,6 +359,7 @@ async function writeText(filePath: string, text: string): Promise<void> {
   if (existed) {
     await createConfigBackup(filePath);
   }
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, text, 'utf8');
 }
 
