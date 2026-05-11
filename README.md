@@ -157,7 +157,7 @@ opencode 的 `npm` 值来自 Provider 中配置的 `opencode npm`。
 | --- | --- | --- |
 | `LLM-Switch: Open Manager` | `llm-switch.openManager` | 打开 LLM-Switch 管理页面。 |
 | `LLM-Switch: Open Claude Config` | `llm-switch.openClaudeConfig` | 打开 Claude 配置文件。 |
-| `LLM-Switch: Open Codex Config` | `llm-switch.openCodexConfig` | 同时打开 Codex `config.toml` 和 `auth.json`。 |
+| `LLM-Switch: Open Codex Config` | `llm-switch.openCodexConfig` | 分栏打开 Codex `config.toml` 和 `auth.json`。 |
 | `LLM-Switch: Open opencode Config` | `llm-switch.openOpencodeConfig` | 打开 opencode 配置文件。 |
 | `LLM-Switch: Quick Switch Claude Model` | `llm-switch.quickSwitchClaudeModel` | 快速选择 Provider 模型并应用到 Claude。 |
 | `LLM-Switch: Quick Switch Codex Model` | `llm-switch.quickSwitchCodexModel` | 快速选择 Provider 模型并应用到 Codex。 |

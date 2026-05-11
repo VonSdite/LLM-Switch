@@ -229,16 +229,25 @@ async function showToast(level: string, message: string): Promise<void> {
 
 async function openConfigInEditor(context: vscode.ExtensionContext, agent: AgentName): Promise<void> {
   const filePaths = await openAgentConfigFiles(context, agent);
+  if (agent === 'codex' && filePaths.length > 1) {
+    await openFileInEditor(filePaths[0], vscode.ViewColumn.Active);
+    await openFileInEditor(filePaths[1], vscode.ViewColumn.Beside);
+    return;
+  }
+
   for (const filePath of filePaths) {
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-    await vscode.window.showTextDocument(document, { preview: false });
+    await openFileInEditor(filePath, vscode.ViewColumn.Active);
   }
 }
 
 async function openConfigPathInEditor(context: vscode.ExtensionContext, target: ConfigPathTarget): Promise<void> {
   const filePath = await openConfigPath(context, target);
+  await openFileInEditor(filePath, vscode.ViewColumn.Active);
+}
+
+async function openFileInEditor(filePath: string, viewColumn: vscode.ViewColumn): Promise<void> {
   const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-  await vscode.window.showTextDocument(document, { preview: false });
+  await vscode.window.showTextDocument(document, { preview: false, viewColumn });
 }
 
 async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: AgentName): Promise<boolean> {
