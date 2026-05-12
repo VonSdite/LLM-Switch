@@ -155,15 +155,15 @@ class LlmSwitchManager {
           await this.broadcastState();
           return;
         case 'saveClaude':
-          await saveClaudeConfig(this.context, loadProviders(this.context), asRecord(message.payload) as never);
+          await saveClaudeConfig(this.context, await loadProviders(this.context), asRecord(message.payload) as never);
           await this.broadcastState();
           return;
         case 'saveCodex':
-          await saveCodexConfig(this.context, loadProviders(this.context), asRecord(message.payload) as never);
+          await saveCodexConfig(this.context, await loadProviders(this.context), asRecord(message.payload) as never);
           await this.broadcastState();
           return;
         case 'saveOpencode':
-          await saveOpencodeConfig(this.context, loadProviders(this.context), asRecord(message.payload) as never);
+          await saveOpencodeConfig(this.context, await loadProviders(this.context), asRecord(message.payload) as never);
           await this.broadcastState();
           return;
         case 'openConfig':
@@ -190,7 +190,7 @@ class LlmSwitchManager {
   }
 
   private async getState(): Promise<WebviewState> {
-    const providers = loadProviders(this.context);
+    const providers = await loadProviders(this.context);
     const agents = await readAgentsState(this.context, providers);
     return { providers, agents };
   }
@@ -251,7 +251,7 @@ async function openFileInEditor(filePath: string, viewColumn: vscode.ViewColumn)
 }
 
 async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: AgentName): Promise<boolean> {
-  const providers = loadProviders(context);
+  const providers = await loadProviders(context);
   const agents = await readAgentsState(context, providers);
   const agentState = agents[agent];
   const agentLabel = agentDisplayName(agent);

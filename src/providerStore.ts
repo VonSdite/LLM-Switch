@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { CodexWireApi, ProviderConfig, ProxyMode } from './types';
 
 const PROVIDERS_KEY = 'providers';
+const PROVIDER_API_KEY_SECRET_PREFIX = 'llm-switch.providerApiKey.';
 const DEFAULT_OPENCODE_NPM = '@ai-sdk/openai-compatible';
 const PROVIDER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const PROVIDER_NAME_ERROR = 'Provider 名称只能包含英文字母、数字、下划线和中划线，长度 1-64，且必须以字母或数字开头。';
@@ -22,13 +23,14 @@ interface ProviderInput {
   opencodeNpm?: string;
 }
 
-export function loadProviders(context: vscode.ExtensionContext): ProviderConfig[] {
+export async function loadProviders(context: vscode.ExtensionContext): Promise<ProviderConfig[]> {
   const stored = context.globalState.get<unknown[]>(PROVIDERS_KEY, []);
   if (!Array.isArray(stored)) {
     return [];
   }
 
   const providers: ProviderConfig[] = [];
+  let needsMigration = false;
   for (const item of stored) {
     if (!item || typeof item !== 'object') {
       continue;
@@ -38,13 +40,28 @@ export function loadProviders(context: vscode.ExtensionContext): ProviderConfig[
     if (!name) {
       continue;
     }
-    const id = stringValue(raw.id) || randomUUID();
-    const key = stringValue(raw.key) || uniqueProviderKey(name, providers);
+    const storedId = stringValue(raw.id);
+    const id = storedId || randomUUID();
+    const storedKey = stringValue(raw.key);
+    const key = storedKey || uniqueProviderKey(name, providers);
+    const hasInlineApiKey = Object.prototype.hasOwnProperty.call(raw, 'apiKey');
+    const inlineApiKey = stringValue(raw.apiKey);
+    const apiKey = inlineApiKey || await context.secrets.get(providerApiKeySecretKey(id)) || '';
+    if (!storedId || !storedKey || hasInlineApiKey) {
+      needsMigration = true;
+    }
+    if (hasInlineApiKey) {
+      if (inlineApiKey) {
+        await context.secrets.store(providerApiKeySecretKey(id), inlineApiKey);
+      } else {
+        await context.secrets.delete(providerApiKeySecretKey(id));
+      }
+    }
     providers.push({
       id,
       key,
       name,
-      apiKey: stringValue(raw.apiKey),
+      apiKey,
       proxyMode: normalizeProxyMode(raw.proxyMode),
       customProxyUrl: stringValue(raw.customProxyUrl),
       sslCheck: typeof raw.sslCheck === 'boolean' ? raw.sslCheck : false,
@@ -56,15 +73,26 @@ export function loadProviders(context: vscode.ExtensionContext): ProviderConfig[
       opencodeNpm: normalizeOpencodeNpm(raw.opencodeNpm)
     });
   }
+  if (needsMigration) {
+    await saveProviders(context, providers);
+  }
   return providers;
 }
 
 export async function saveProviders(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<void> {
-  await context.globalState.update(PROVIDERS_KEY, providers);
+  await Promise.all(providers.map(async (provider) => {
+    const secretKey = providerApiKeySecretKey(provider.id);
+    if (provider.apiKey) {
+      await context.secrets.store(secretKey, provider.apiKey);
+    } else {
+      await context.secrets.delete(secretKey);
+    }
+  }));
+  await context.globalState.update(PROVIDERS_KEY, providers.map(providerState));
 }
 
 export async function upsertProvider(context: vscode.ExtensionContext, input: ProviderInput): Promise<ProviderConfig[]> {
-  const providers = loadProviders(context);
+  const providers = await loadProviders(context);
   const name = stringValue(input.name).trim();
   if (!name) {
     throw new Error('Provider 名称必填。');
@@ -110,13 +138,15 @@ export async function upsertProvider(context: vscode.ExtensionContext, input: Pr
 }
 
 export async function deleteProvider(context: vscode.ExtensionContext, id: string): Promise<ProviderConfig[]> {
-  const providers = loadProviders(context).filter((provider) => provider.id !== id);
+  const existing = await loadProviders(context);
+  const providers = existing.filter((provider) => provider.id !== id);
   await saveProviders(context, providers);
+  await context.secrets.delete(providerApiKeySecretKey(id));
   return providers;
 }
 
 export async function reorderProviders(context: vscode.ExtensionContext, orderedIds: string[]): Promise<ProviderConfig[]> {
-  const providers = loadProviders(context);
+  const providers = await loadProviders(context);
   const byId = new Map(providers.map((provider) => [provider.id, provider]));
   const reordered: ProviderConfig[] = [];
 
@@ -212,6 +242,27 @@ function normalizeOpencodeNpm(value: unknown): string {
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function providerApiKeySecretKey(providerId: string): string {
+  return `${PROVIDER_API_KEY_SECRET_PREFIX}${providerId}`;
+}
+
+function providerState(provider: ProviderConfig): Omit<ProviderConfig, 'apiKey'> {
+  return {
+    id: provider.id,
+    key: provider.key,
+    name: provider.name,
+    proxyMode: provider.proxyMode,
+    customProxyUrl: provider.customProxyUrl,
+    sslCheck: provider.sslCheck,
+    models: provider.models,
+    claudeBaseUrl: provider.claudeBaseUrl,
+    codexBaseUrl: provider.codexBaseUrl,
+    codexWireApi: provider.codexWireApi,
+    opencodeBaseUrl: provider.opencodeBaseUrl,
+    opencodeNpm: provider.opencodeNpm
+  };
 }
 
 function dedupe(values: string[]): string[] {

@@ -2,7 +2,7 @@
   "name": "llm-switch",
   "displayName": "LLM-Switch",
   "description": "Unified AI provider and agent model configuration manager for Claude, Codex, and opencode.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publisher": "VonSdite",
   "license": "MIT",
   "icon": "icon.png",
@@ -16,6 +16,9 @@
   },
   "categories": [
     "Other"
+  ],
+  "extensionKind": [
+    "workspace"
   ],
   "activationEvents": [
     "onCommand:llm-switch.openManager",
