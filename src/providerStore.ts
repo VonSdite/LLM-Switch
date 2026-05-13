@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
+import { readStorageState, writeStorageState } from './storageFiles';
 import { CodexWireApi, ProviderConfig, ProxyMode } from './types';
 
-const PROVIDERS_KEY = 'providers';
-const PROVIDER_API_KEY_SECRET_PREFIX = 'llm-switch.providerApiKey.';
+const LEGACY_PROVIDERS_KEY = 'providers';
+const PROVIDERS_STATE_NAME = 'providers';
+const LEGACY_PROVIDER_API_KEY_SECRET_PREFIX = 'llm-switch.providerApiKey.';
 const DEFAULT_OPENCODE_NPM = '@ai-sdk/openai-compatible';
 const PROVIDER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const PROVIDER_NAME_ERROR = 'Provider 名称只能包含英文字母、数字、下划线和中划线，长度 1-64，且必须以字母或数字开头。';
@@ -24,7 +26,8 @@ interface ProviderInput {
 }
 
 export async function loadProviders(context: vscode.ExtensionContext): Promise<ProviderConfig[]> {
-  const stored = context.globalState.get<unknown[]>(PROVIDERS_KEY, []);
+  const state = await readStorageState<unknown[]>(context, PROVIDERS_STATE_NAME, []);
+  const stored = state.exists ? state.value : context.globalState.get<unknown[]>(LEGACY_PROVIDERS_KEY, []);
   if (!Array.isArray(stored)) {
     return [];
   }
@@ -46,16 +49,9 @@ export async function loadProviders(context: vscode.ExtensionContext): Promise<P
     const key = storedKey || uniqueProviderKey(name, providers);
     const hasInlineApiKey = Object.prototype.hasOwnProperty.call(raw, 'apiKey');
     const inlineApiKey = stringValue(raw.apiKey);
-    const apiKey = inlineApiKey || await context.secrets.get(providerApiKeySecretKey(id)) || '';
+    const apiKey = inlineApiKey || await readLegacyProviderApiKey(context, id);
     if (!storedId || !storedKey || hasInlineApiKey) {
       needsMigration = true;
-    }
-    if (hasInlineApiKey) {
-      if (inlineApiKey) {
-        await context.secrets.store(providerApiKeySecretKey(id), inlineApiKey);
-      } else {
-        await context.secrets.delete(providerApiKeySecretKey(id));
-      }
     }
     providers.push({
       id,
@@ -73,22 +69,15 @@ export async function loadProviders(context: vscode.ExtensionContext): Promise<P
       opencodeNpm: normalizeOpencodeNpm(raw.opencodeNpm)
     });
   }
-  if (needsMigration) {
+  if (!state.exists || needsMigration) {
     await saveProviders(context, providers);
   }
   return providers;
 }
 
 export async function saveProviders(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<void> {
-  await Promise.all(providers.map(async (provider) => {
-    const secretKey = providerApiKeySecretKey(provider.id);
-    if (provider.apiKey) {
-      await context.secrets.store(secretKey, provider.apiKey);
-    } else {
-      await context.secrets.delete(secretKey);
-    }
-  }));
-  await context.globalState.update(PROVIDERS_KEY, providers.map(providerState));
+  await writeStorageState(context, PROVIDERS_STATE_NAME, providers);
+  await deleteLegacyProviderApiKeys(context, providers);
 }
 
 export async function upsertProvider(context: vscode.ExtensionContext, input: ProviderInput): Promise<ProviderConfig[]> {
@@ -141,7 +130,7 @@ export async function deleteProvider(context: vscode.ExtensionContext, id: strin
   const existing = await loadProviders(context);
   const providers = existing.filter((provider) => provider.id !== id);
   await saveProviders(context, providers);
-  await context.secrets.delete(providerApiKeySecretKey(id));
+  await context.secrets.delete(legacyProviderApiKeySecretKey(id));
   return providers;
 }
 
@@ -244,25 +233,16 @@ function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-function providerApiKeySecretKey(providerId: string): string {
-  return `${PROVIDER_API_KEY_SECRET_PREFIX}${providerId}`;
+function legacyProviderApiKeySecretKey(providerId: string): string {
+  return `${LEGACY_PROVIDER_API_KEY_SECRET_PREFIX}${providerId}`;
 }
 
-function providerState(provider: ProviderConfig): Omit<ProviderConfig, 'apiKey'> {
-  return {
-    id: provider.id,
-    key: provider.key,
-    name: provider.name,
-    proxyMode: provider.proxyMode,
-    customProxyUrl: provider.customProxyUrl,
-    sslCheck: provider.sslCheck,
-    models: provider.models,
-    claudeBaseUrl: provider.claudeBaseUrl,
-    codexBaseUrl: provider.codexBaseUrl,
-    codexWireApi: provider.codexWireApi,
-    opencodeBaseUrl: provider.opencodeBaseUrl,
-    opencodeNpm: provider.opencodeNpm
-  };
+async function readLegacyProviderApiKey(context: vscode.ExtensionContext, providerId: string): Promise<string> {
+  return await context.secrets.get(legacyProviderApiKeySecretKey(providerId)) || '';
+}
+
+async function deleteLegacyProviderApiKeys(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<void> {
+  await Promise.all(providers.map((provider) => context.secrets.delete(legacyProviderApiKeySecretKey(provider.id))));
 }
 
 function dedupe(values: string[]): string[] {

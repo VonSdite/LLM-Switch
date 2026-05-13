@@ -166,9 +166,8 @@ opencode 的 `npm` 值来自 Provider 中配置的 `opencode npm`。
 ## 存储位置
 
 - 插件声明为 workspace 扩展；Remote SSH 场景下运行在远程 Extension Host。
-- Provider 非密钥数据保存在 VS Code 插件全局状态中，key 为 `providers`。
-- Provider API key 保存在 VS Code `SecretStorage` 中。
-- Agent 配置文件路径也保存在 VS Code 插件全局状态中。
+- Provider 数据保存在扩展运行环境的 `globalStorageUri/providers.json`，其中包含 API key。
+- Agent 配置文件路径保存在扩展运行环境的 `globalStorageUri/agentConfigPaths.json`。
 - Claude、Codex、opencode 的实际配置写入各自的配置文件。
 
 ## 开发

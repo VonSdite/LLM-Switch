@@ -31,25 +31,25 @@ export async function readAgentsState(context: vscode.ExtensionContext, provider
 
 export async function openAgentConfigFiles(context: vscode.ExtensionContext, agent: 'claude' | 'codex' | 'opencode'): Promise<string[]> {
   if (agent === 'codex') {
-    const filePaths = [getAgentConfigPath(context, 'codex'), getCodexAuthConfigPath(context)];
+    const filePaths = [await getAgentConfigPath(context, 'codex'), await getCodexAuthConfigPath(context)];
     await Promise.all(filePaths.map((filePath) => requireExistingConfigFile(filePath)));
     return filePaths;
   }
 
-  const filePath = getAgentConfigPath(context, agent);
+  const filePath = await getAgentConfigPath(context, agent);
   await requireExistingConfigFile(filePath);
   return [filePath];
 }
 
 export async function openConfigPath(context: vscode.ExtensionContext, target: ConfigPathTarget): Promise<string> {
-  const filePath = getConfigPath(context, target);
+  const filePath = await getConfigPath(context, target);
   await requireExistingConfigFile(filePath);
   return filePath;
 }
 
 export async function saveClaudeConfig(context: vscode.ExtensionContext, providers: ProviderConfig[], payload: SaveClaudePayload): Promise<void> {
   const provider = findProvider(providers, payload.providerId, 'claude');
-  const filePath = getAgentConfigPath(context, 'claude');
+  const filePath = await getAgentConfigPath(context, 'claude');
   await requireExistingConfigFile(filePath);
   const config = await readJsonConfig(filePath, { env: {} });
   const env = ensureObject(config, 'env');
@@ -76,10 +76,10 @@ export async function saveCodexConfig(context: vscode.ExtensionContext, provider
     throw new Error('请选择 Codex 模型。');
   }
 
-  const filePath = getAgentConfigPath(context, 'codex');
+  const filePath = await getAgentConfigPath(context, 'codex');
   await requireExistingConfigFile(filePath);
   const config = await readTomlConfig(filePath, {});
-  const authPath = getCodexAuthConfigPath(context);
+  const authPath = await getCodexAuthConfigPath(context);
   const auth = await readJsonConfig(authPath, {});
   const providerName = provider.name;
   config.model_provider = providerName;
@@ -105,7 +105,7 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     throw new Error('请选择 opencode 模型。');
   }
 
-  const filePath = getAgentConfigPath(context, 'opencode');
+  const filePath = await getAgentConfigPath(context, 'opencode');
   await requireExistingConfigFile(filePath);
   const config = await readJsonConfig(filePath, { $schema: 'https://opencode.ai/config.json' });
   if (!config.$schema) {
@@ -138,7 +138,7 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
 }
 
 async function readClaudeState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<ClaudeAgentState> {
-  const pathInfo = getAgentConfigPathInfo(context, 'claude');
+  const pathInfo = await getAgentConfigPathInfo(context, 'claude');
   const filePath = pathInfo.path;
   const exists = await fileExists(filePath);
   const baseState: ClaudeAgentState = {
@@ -177,8 +177,8 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
 }
 
 async function readCodexState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<CodexAgentState> {
-  const pathInfo = getAgentConfigPathInfo(context, 'codex');
-  const authPathInfo = getCodexAuthConfigPathInfo(context);
+  const pathInfo = await getAgentConfigPathInfo(context, 'codex');
+  const authPathInfo = await getCodexAuthConfigPathInfo(context);
   const filePath = pathInfo.path;
   const exists = await fileExists(filePath);
   const authExists = await fileExists(authPathInfo.path);
@@ -238,7 +238,7 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
 }
 
 async function readOpencodeState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<OpencodeAgentState> {
-  const pathInfo = getAgentConfigPathInfo(context, 'opencode');
+  const pathInfo = await getAgentConfigPathInfo(context, 'opencode');
   const filePath = pathInfo.path;
   const exists = await fileExists(filePath);
   const baseState: OpencodeAgentState = {
