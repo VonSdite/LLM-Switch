@@ -789,8 +789,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
     .checkbox-line {
       display: flex;
       align-items: center;
+      justify-self: start;
       gap: 8px;
       min-height: 30px;
+      width: max-content;
+      max-width: 100%;
     }
     .checkbox-line input {
       width: auto;
