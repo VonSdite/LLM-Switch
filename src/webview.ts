@@ -98,7 +98,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
       resize: vertical;
       white-space: pre;
     }
-    label {
+    label,
+    .field {
       display: grid;
       gap: 5px;
       min-width: 0;
@@ -1488,7 +1489,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           renderProviderSelect('codexProviderSelect', providers, selectedId, '选择 Codex Provider') +
           '<div class="form">' +
             '<h3 class="section-title">Codex 模型</h3>' +
-            field('model', modelSelect('codexModel', provider, selectedModel, disabled)) +
+            fieldGroup('model', modelSelect('codexModel', provider, selectedModel, disabled)) +
             renderCodexChangePreview(agent, provider, selectedModel, disabled) +
           '</div>' +
         '</section>';
@@ -1512,7 +1513,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           renderProviderSelect('opencodeProviderSelect', providers, selectedId, '选择 opencode Provider') +
           '<div class="form">' +
             '<h3 class="section-title">opencode 模型</h3>' +
-            field('model', modelSelect('opencodeModel', provider, selectedModel, disabled)) +
+            fieldGroup('model', modelSelect('opencodeModel', provider, selectedModel, disabled)) +
             renderOpencodeChangePreview(agent, provider, selectedModel, disabled) +
           '</div>' +
         '</section>';
@@ -1913,7 +1914,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const options = [['', placeholder]].concat(providers.map(function (provider) {
           return [provider.id, provider.name];
         }));
-        return field('Provider', searchSelect(id, options, selectedId, false, 'provider-search-select', '搜索 Provider'));
+        return fieldGroup('Provider', searchSelect(id, options, selectedId, false, 'provider-search-select', '搜索 Provider'));
       }
 
       function renderParseNotice(agent) {
@@ -2194,6 +2195,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       function field(label, control) {
         return '<label><span>' + h(label) + '</span>' + control + '</label>';
+      }
+
+      function fieldGroup(label, control) {
+        return '<div class="field"><span>' + h(label) + '</span>' + control + '</div>';
       }
 
       function fieldWithHelp(label, help, control) {
