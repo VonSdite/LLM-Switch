@@ -35,6 +35,11 @@ interface ModelRequestOptions {
   customProxyUrl: string;
 }
 
+interface ResolvedProxy {
+  url: string;
+  authorization: string;
+}
+
 interface ModelQuickPickItem extends vscode.QuickPickItem {
   providerId: string;
   model: string;
@@ -506,6 +511,12 @@ function requestText(rawUrl: string, options: ModelRequestOptions): Promise<{ st
   if (options.proxyMode === 'custom' && options.customProxyUrl.trim()) {
     return requestViaProxy(target, headers, options.customProxyUrl.trim());
   }
+  if (options.proxyMode === 'system') {
+    const proxy = systemProxyForTarget(target);
+    if (proxy) {
+      return requestViaProxy(target, headers, proxy.url, proxy.authorization);
+    }
+  }
   return requestDirect(target, headers);
 }
 
@@ -531,17 +542,18 @@ function requestDirect(target: URL, headers: Record<string, string>): Promise<{ 
       method: 'GET',
       path: `${target.pathname}${target.search}`,
       headers,
+      agent: false,
       rejectUnauthorized: false
     }
   });
 }
 
-function requestViaProxy(target: URL, headers: Record<string, string>, proxyUrl: string): Promise<{ statusCode: number; body: string }> {
+function requestViaProxy(target: URL, headers: Record<string, string>, proxyUrl: string, proxyAuthorization = ''): Promise<{ statusCode: number; body: string }> {
   const proxy = parseProxyUrl(proxyUrl);
   if (target.protocol === 'http:') {
     const transport = proxy.protocol === 'https:' ? https : http;
     const proxyHeaders = { ...headers, host: target.host };
-    applyProxyAuthorization(proxyHeaders, proxy);
+    applyProxyAuthorization(proxyHeaders, proxy, proxyAuthorization);
     return nodeRequest({
       transport,
       options: {
@@ -551,19 +563,20 @@ function requestViaProxy(target: URL, headers: Record<string, string>, proxyUrl:
         method: 'GET',
         path: target.toString(),
         headers: proxyHeaders,
+        agent: false,
         rejectUnauthorized: false
       }
     });
   }
-  return requestHttpsViaProxy(target, headers, proxy);
+  return requestHttpsViaProxy(target, headers, proxy, proxyAuthorization);
 }
 
-function requestHttpsViaProxy(target: URL, headers: Record<string, string>, proxy: URL): Promise<{ statusCode: number; body: string }> {
+function requestHttpsViaProxy(target: URL, headers: Record<string, string>, proxy: URL, proxyAuthorization = ''): Promise<{ statusCode: number; body: string }> {
   return new Promise((resolve, reject) => {
     const proxyHeaders: Record<string, string> = {
       host: `${target.hostname}:${target.port || '443'}`
     };
-    applyProxyAuthorization(proxyHeaders, proxy);
+    applyProxyAuthorization(proxyHeaders, proxy, proxyAuthorization);
     const transport = proxy.protocol === 'https:' ? https : http;
     const request = transport.request({
       protocol: proxy.protocol,
@@ -572,6 +585,7 @@ function requestHttpsViaProxy(target: URL, headers: Record<string, string>, prox
       method: 'CONNECT',
       path: `${target.hostname}:${target.port || '443'}`,
       headers: proxyHeaders,
+      agent: false,
       rejectUnauthorized: false
     });
     const timeout = setTimeout(() => {
@@ -602,6 +616,126 @@ function requestHttpsViaProxy(target: URL, headers: Record<string, string>, prox
     });
     request.end();
   });
+}
+
+function systemProxyForTarget(target: URL): ResolvedProxy | undefined {
+  if (shouldBypassSystemProxy(target)) {
+    return undefined;
+  }
+
+  const configuredProxy = httpConfigString('proxy').trim();
+  if (configuredProxy) {
+    return {
+      url: normalizeProxyUrl(configuredProxy),
+      authorization: httpConfigString('proxyAuthorization').trim()
+    };
+  }
+
+  const envProxy = envProxyForTarget(target);
+  return envProxy ? { url: normalizeProxyUrl(envProxy), authorization: '' } : undefined;
+}
+
+function httpConfigString(key: string): string {
+  const value = vscode.workspace.getConfiguration('http').get<unknown>(key);
+  return typeof value === 'string' ? value : '';
+}
+
+function envProxyForTarget(target: URL): string {
+  const names = target.protocol === 'https:'
+    ? ['HTTPS_PROXY', 'ALL_PROXY', 'HTTP_PROXY']
+    : ['HTTP_PROXY', 'ALL_PROXY'];
+  for (const name of names) {
+    const value = envValue(name).trim();
+    if (value) {
+      return value;
+    }
+  }
+  return '';
+}
+
+function envValue(name: string): string {
+  const exact = process.env[name];
+  if (exact) {
+    return exact;
+  }
+  const requested = name.toLocaleLowerCase();
+  const found = Object.entries(process.env).find(([key]) => key.toLocaleLowerCase() === requested);
+  return found?.[1] || '';
+}
+
+function shouldBypassSystemProxy(target: URL): boolean {
+  const noProxy = envValue('NO_PROXY').trim();
+  if (!noProxy) {
+    return false;
+  }
+  return noProxy.split(',').some((entry) => noProxyEntryMatches(entry, target));
+}
+
+function noProxyEntryMatches(entry: string, target: URL): boolean {
+  const value = entry.trim().toLocaleLowerCase();
+  if (!value) {
+    return false;
+  }
+  if (value === '*') {
+    return true;
+  }
+
+  const { host, port } = splitNoProxyEntry(value.replace(/^[a-z][a-z\d+.-]*:\/\//i, ''));
+  if (!host) {
+    return false;
+  }
+  if (port && port !== targetPort(target)) {
+    return false;
+  }
+
+  const targetHost = normalizeHostname(target.hostname);
+  const pattern = normalizeHostname(host);
+  if (pattern === targetHost) {
+    return true;
+  }
+  if (pattern.startsWith('*.')) {
+    const suffix = pattern.slice(1);
+    return targetHost.endsWith(suffix) && targetHost.length > suffix.length;
+  }
+  if (pattern.startsWith('.')) {
+    return targetHost === pattern.slice(1) || targetHost.endsWith(pattern);
+  }
+  return pattern.includes('.') && targetHost.endsWith(`.${pattern}`);
+}
+
+function splitNoProxyEntry(value: string): { host: string; port: string } {
+  const withoutPath = value.split('/')[0];
+  if (withoutPath.startsWith('[')) {
+    const end = withoutPath.indexOf(']');
+    if (end >= 0) {
+      const port = withoutPath.slice(end + 1).startsWith(':') ? withoutPath.slice(end + 2) : '';
+      return { host: withoutPath.slice(1, end), port };
+    }
+  }
+
+  const colonCount = (withoutPath.match(/:/g) || []).length;
+  if (colonCount === 1) {
+    const [host, port] = withoutPath.split(':');
+    return { host, port };
+  }
+  return { host: withoutPath, port: '' };
+}
+
+function normalizeHostname(host: string): string {
+  return host.trim().toLocaleLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '');
+}
+
+function targetPort(target: URL): string {
+  if (target.port) {
+    return target.port;
+  }
+  if (target.protocol === 'https:') {
+    return '443';
+  }
+  if (target.protocol === 'http:') {
+    return '80';
+  }
+  return '';
 }
 
 function nodeRequest(args: { transport: typeof http | typeof https; options: http.RequestOptions | https.RequestOptions }): Promise<{ statusCode: number; body: string }> {
@@ -695,7 +829,7 @@ function decodeChunkedBody(body: Buffer): Buffer {
 
 function parseProxyUrl(proxyUrl: string): URL {
   try {
-    const parsed = new URL(proxyUrl);
+    const parsed = new URL(normalizeProxyUrl(proxyUrl));
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('代理地址只支持 http 或 https。');
     }
@@ -708,9 +842,18 @@ function parseProxyUrl(proxyUrl: string): URL {
   }
 }
 
-function applyProxyAuthorization(headers: Record<string, string>, proxy: URL): void {
+function normalizeProxyUrl(proxyUrl: string): string {
+  const trimmed = proxyUrl.trim();
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+function applyProxyAuthorization(headers: Record<string, string>, proxy: URL, proxyAuthorization = ''): void {
   if (proxy.username || proxy.password) {
     headers['proxy-authorization'] = `Basic ${Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString('base64')}`;
+    return;
+  }
+  if (proxyAuthorization.trim()) {
+    headers['proxy-authorization'] = proxyAuthorization.trim();
   }
 }
 
