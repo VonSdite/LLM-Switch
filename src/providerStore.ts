@@ -217,7 +217,7 @@ function normalizeProxyMode(value: unknown): ProxyMode {
   if (value === 'direct' || value === 'system' || value === 'custom') {
     return value;
   }
-  return 'direct';
+  return 'system';
 }
 
 function normalizeWireApi(value: unknown): CodexWireApi {

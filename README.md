@@ -32,7 +32,7 @@ Provider 字段：
 - `Codex wire_api`：可选 `responses` 或 `chat`，保存 Codex 配置时写入 `[model_providers.<provider>]`。
 - `opencode API 地址`：填写后，该 Provider 可用于 opencode。
 - `opencode npm`：可选 `@ai-sdk/openai-compatible`、`@ai-sdk/openai`，也可选择自定义并填写 npm 包名。
-- `代理模式`：支持直连模式、系统代理模式、自定义代理；选择自定义代理时需要填写代理地址。
+- `代理模式`：默认系统代理模式，支持直连模式、系统代理模式、自定义代理；选择自定义代理时需要填写代理地址。
 - `SSL 证书校验`：默认不勾选。
 - `模型列表`：每行一个模型，保存时会去重并排序。
 

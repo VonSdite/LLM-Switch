@@ -2142,7 +2142,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           key: '',
           name: '',
           apiKey: '',
-          proxyMode: 'direct',
+          proxyMode: 'system',
           customProxyUrl: '',
           sslCheck: false,
           models: [],
