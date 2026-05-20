@@ -1,5 +1,4 @@
-import * as http from 'node:http';
-import * as https from 'node:https';
+import * as net from 'node:net';
 import * as tls from 'node:tls';
 import * as vscode from 'vscode';
 import {
@@ -24,6 +23,7 @@ interface FetchProviderModelsPayload {
   apiKey: string;
   proxyMode: string;
   customProxyUrl: string;
+  sslCheck: boolean;
   claudeBaseUrl: string;
   codexBaseUrl: string;
   opencodeBaseUrl: string;
@@ -33,6 +33,7 @@ interface ModelRequestOptions {
   apiKey: string;
   proxyMode: string;
   customProxyUrl: string;
+  sslCheck: boolean;
 }
 
 interface ResolvedProxy {
@@ -429,12 +430,18 @@ function stringArrayField(value: unknown, key: string): string[] {
   return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : [];
 }
 
+function booleanField(value: unknown, key: string): boolean {
+  const record = asRecord(value);
+  return record[key] === true;
+}
+
 function fetchProviderModelsPayload(payload: unknown): FetchProviderModelsPayload {
   const record = asRecord(payload);
   return {
     apiKey: stringField(record, 'apiKey'),
     proxyMode: stringField(record, 'proxyMode'),
     customProxyUrl: stringField(record, 'customProxyUrl'),
+    sslCheck: booleanField(record, 'sslCheck'),
     claudeBaseUrl: stringField(record, 'claudeBaseUrl'),
     codexBaseUrl: stringField(record, 'codexBaseUrl'),
     opencodeBaseUrl: stringField(record, 'opencodeBaseUrl')
@@ -509,15 +516,15 @@ function requestText(rawUrl: string, options: ModelRequestOptions): Promise<{ st
   const target = new URL(rawUrl);
   const headers = modelRequestHeaders(target, options.apiKey);
   if (options.proxyMode === 'custom' && options.customProxyUrl.trim()) {
-    return requestViaProxy(target, headers, options.customProxyUrl.trim());
+    return requestViaProxy(target, headers, options.customProxyUrl.trim(), options.sslCheck);
   }
   if (options.proxyMode === 'system') {
     const proxy = systemProxyForTarget(target);
     if (proxy) {
-      return requestViaProxy(target, headers, proxy.url, proxy.authorization);
+      return requestViaProxy(target, headers, proxy.url, options.sslCheck, proxy.authorization);
     }
   }
-  return requestDirect(target, headers);
+  return requestDirect(target, headers, options.sslCheck);
 }
 
 function modelRequestHeaders(target: URL, apiKey: string): Record<string, string> {
@@ -531,91 +538,43 @@ function modelRequestHeaders(target: URL, apiKey: string): Record<string, string
   return headers;
 }
 
-function requestDirect(target: URL, headers: Record<string, string>): Promise<{ statusCode: number; body: string }> {
-  const transport = target.protocol === 'https:' ? https : http;
-  return nodeRequest({
-    transport,
-    options: {
-      protocol: target.protocol,
-      hostname: target.hostname,
-      port: target.port || undefined,
-      method: 'GET',
-      path: `${target.pathname}${target.search}`,
-      headers,
-      agent: false,
-      rejectUnauthorized: false
-    }
-  });
+async function requestDirect(target: URL, headers: Record<string, string>, sslCheck: boolean): Promise<{ statusCode: number; body: string }> {
+  const socket = await connectUrl(target, sslCheck);
+  const response = readRawHttpResponse(socket);
+  writeRawHttpRequest(socket, target, headers);
+  return response;
 }
 
-function requestViaProxy(target: URL, headers: Record<string, string>, proxyUrl: string, proxyAuthorization = ''): Promise<{ statusCode: number; body: string }> {
+function requestViaProxy(target: URL, headers: Record<string, string>, proxyUrl: string, sslCheck: boolean, proxyAuthorization = ''): Promise<{ statusCode: number; body: string }> {
   const proxy = parseProxyUrl(proxyUrl);
   if (target.protocol === 'http:') {
-    const transport = proxy.protocol === 'https:' ? https : http;
-    const proxyHeaders = { ...headers, host: target.host };
-    applyProxyAuthorization(proxyHeaders, proxy, proxyAuthorization);
-    return nodeRequest({
-      transport,
-      options: {
-        protocol: proxy.protocol,
-        hostname: proxy.hostname,
-        port: proxy.port || undefined,
-        method: 'GET',
-        path: target.toString(),
-        headers: proxyHeaders,
-        agent: false,
-        rejectUnauthorized: false
-      }
-    });
+    return requestHttpViaProxy(target, headers, proxy, sslCheck, proxyAuthorization);
   }
-  return requestHttpsViaProxy(target, headers, proxy, proxyAuthorization);
+  return requestHttpsViaProxy(target, headers, proxy, sslCheck, proxyAuthorization);
 }
 
-function requestHttpsViaProxy(target: URL, headers: Record<string, string>, proxy: URL, proxyAuthorization = ''): Promise<{ statusCode: number; body: string }> {
-  return new Promise((resolve, reject) => {
-    const proxyHeaders: Record<string, string> = {
-      host: `${target.hostname}:${target.port || '443'}`
-    };
-    applyProxyAuthorization(proxyHeaders, proxy, proxyAuthorization);
-    const transport = proxy.protocol === 'https:' ? https : http;
-    const request = transport.request({
-      protocol: proxy.protocol,
-      hostname: proxy.hostname,
-      port: proxy.port || undefined,
-      method: 'CONNECT',
-      path: `${target.hostname}:${target.port || '443'}`,
-      headers: proxyHeaders,
-      agent: false,
-      rejectUnauthorized: false
-    });
-    const timeout = setTimeout(() => {
-      request.destroy(new Error('请求超时'));
-    }, 15000);
+async function requestHttpViaProxy(target: URL, headers: Record<string, string>, proxy: URL, sslCheck: boolean, proxyAuthorization = ''): Promise<{ statusCode: number; body: string }> {
+  const socket = await connectUrl(proxy, sslCheck);
+  const proxyHeaders = { ...headers, host: target.host };
+  applyProxyAuthorization(proxyHeaders, proxy, proxyAuthorization);
+  const response = readRawHttpResponse(socket);
+  writeRawHttpRequest(socket, target, proxyHeaders, target.toString());
+  return response;
+}
 
-    request.once('connect', (response, socket) => {
-      clearTimeout(timeout);
-      if (response.statusCode !== 200) {
-        socket.destroy();
-        reject(new Error(`代理 CONNECT 失败：HTTP ${response.statusCode || 0}`));
-        return;
-      }
-      const tlsSocket = tls.connect({
-        socket,
-        servername: target.hostname,
-        rejectUnauthorized: false
-      });
-      tlsSocket.once('secureConnect', () => {
-        writeRawHttpRequest(tlsSocket, target, headers);
-        readRawHttpResponse(tlsSocket).then(resolve, reject);
-      });
-      tlsSocket.once('error', reject);
-    });
-    request.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    request.end();
-  });
+async function requestHttpsViaProxy(target: URL, headers: Record<string, string>, proxy: URL, sslCheck: boolean, proxyAuthorization = ''): Promise<{ statusCode: number; body: string }> {
+  const socket = await connectUrl(proxy, sslCheck);
+  const proxyHeaders: Record<string, string> = {
+    host: `${target.hostname}:${target.port || '443'}`
+  };
+  applyProxyAuthorization(proxyHeaders, proxy, proxyAuthorization);
+  const connectResponse = readProxyConnectResponse(socket);
+  writeProxyConnectRequest(socket, target, proxyHeaders);
+  await connectResponse;
+  const tlsSocket = await upgradeSocketToTls(socket, target, sslCheck);
+  const response = readRawHttpResponse(tlsSocket);
+  writeRawHttpRequest(tlsSocket, target, headers);
+  return response;
 }
 
 function systemProxyForTarget(target: URL): ResolvedProxy | undefined {
@@ -738,26 +697,90 @@ function targetPort(target: URL): string {
   return '';
 }
 
-function nodeRequest(args: { transport: typeof http | typeof https; options: http.RequestOptions | https.RequestOptions }): Promise<{ statusCode: number; body: string }> {
-  return new Promise((resolve, reject) => {
-    const request = args.transport.request(args.options, (response) => {
-      const chunks: Buffer[] = [];
-      response.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-      response.on('end', () => {
-        resolve({
-          statusCode: response.statusCode || 0,
-          body: Buffer.concat(chunks).toString('utf8')
-        });
-      });
-    });
-    request.setTimeout(15000, () => request.destroy(new Error('请求超时')));
-    request.once('error', reject);
-    request.end();
+type NetworkSocket = net.Socket | tls.TLSSocket;
+
+function connectUrl(target: URL, sslCheck: boolean): Promise<NetworkSocket> {
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    throw new Error('API 地址只支持 http 或 https。');
+  }
+  return connectSocket({
+    hostname: target.hostname,
+    port: Number(targetPort(target)),
+    secure: target.protocol === 'https:',
+    servername: target.hostname,
+    sslCheck
   });
 }
 
-function writeRawHttpRequest(socket: tls.TLSSocket, target: URL, headers: Record<string, string>): void {
-  const path = `${target.pathname}${target.search}`;
+function connectSocket(options: { hostname: string; port: number; secure: boolean; servername: string; sslCheck: boolean }): Promise<NetworkSocket> {
+  return new Promise((resolve, reject) => {
+    let socket: NetworkSocket;
+    const cleanup = () => {
+      socket.off('error', onError);
+      socket.off('timeout', onTimeout);
+    };
+    const onConnect = () => {
+      cleanup();
+      resolve(socket);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const onTimeout = () => {
+      socket.destroy(new Error('请求超时'));
+    };
+
+    socket = options.secure
+      ? tls.connect({
+        host: options.hostname,
+        port: options.port,
+        servername: options.servername,
+        rejectUnauthorized: options.sslCheck
+      })
+      : net.connect({
+        host: options.hostname,
+        port: options.port
+      });
+
+    socket.setTimeout(15000, onTimeout);
+    socket.once(options.secure ? 'secureConnect' : 'connect', onConnect);
+    socket.once('error', onError);
+  });
+}
+
+function upgradeSocketToTls(socket: NetworkSocket, target: URL, sslCheck: boolean): Promise<tls.TLSSocket> {
+  return new Promise((resolve, reject) => {
+    const tlsSocket = tls.connect({
+      socket,
+      servername: target.hostname,
+      rejectUnauthorized: sslCheck
+    });
+    const cleanup = () => {
+      tlsSocket.off('secureConnect', onSecureConnect);
+      tlsSocket.off('error', onError);
+      tlsSocket.off('timeout', onTimeout);
+    };
+    const onSecureConnect = () => {
+      cleanup();
+      resolve(tlsSocket);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const onTimeout = () => {
+      tlsSocket.destroy(new Error('请求超时'));
+    };
+
+    tlsSocket.setTimeout(15000, onTimeout);
+    tlsSocket.once('secureConnect', onSecureConnect);
+    tlsSocket.once('error', onError);
+  });
+}
+
+function writeRawHttpRequest(socket: NetworkSocket, target: URL, headers: Record<string, string>, pathOverride = ''): void {
+  const path = pathOverride || `${target.pathname}${target.search}`;
   const lines = [
     `GET ${path} HTTP/1.1`,
     ...Object.entries(headers).map(([key, value]) => `${key}: ${value}`),
@@ -768,7 +791,57 @@ function writeRawHttpRequest(socket: tls.TLSSocket, target: URL, headers: Record
   socket.write(lines.join('\r\n'));
 }
 
-function readRawHttpResponse(socket: tls.TLSSocket): Promise<{ statusCode: number; body: string }> {
+function writeProxyConnectRequest(socket: NetworkSocket, target: URL, headers: Record<string, string>): void {
+  const authority = `${target.hostname}:${target.port || '443'}`;
+  const lines = [
+    `CONNECT ${authority} HTTP/1.1`,
+    ...Object.entries(headers).map(([key, value]) => `${key}: ${value}`),
+    '',
+    ''
+  ];
+  socket.write(lines.join('\r\n'));
+}
+
+function readProxyConnectResponse(socket: NetworkSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const cleanup = () => {
+      socket.off('data', onData);
+      socket.off('error', onError);
+      socket.off('timeout', onTimeout);
+    };
+    const onData = (chunk: Buffer | string) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const raw = Buffer.concat(chunks);
+      const separator = raw.indexOf('\r\n\r\n');
+      if (separator < 0) {
+        return;
+      }
+      cleanup();
+      const head = raw.slice(0, separator).toString('utf8');
+      const statusCode = Number((head.match(/^HTTP\/\d(?:\.\d)?\s+(\d+)/) || [])[1] || 0);
+      if (statusCode !== 200) {
+        socket.destroy();
+        reject(new Error(`代理 CONNECT 失败：HTTP ${statusCode}`));
+        return;
+      }
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const onTimeout = () => {
+      socket.destroy(new Error('请求超时'));
+    };
+
+    socket.setTimeout(15000, onTimeout);
+    socket.on('data', onData);
+    socket.once('error', onError);
+  });
+}
+
+function readRawHttpResponse(socket: NetworkSocket): Promise<{ statusCode: number; body: string }> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     socket.setTimeout(15000, () => socket.destroy(new Error('请求超时')));

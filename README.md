@@ -32,8 +32,8 @@ Provider 字段：
 - `Codex wire_api`：可选 `responses` 或 `chat`，保存 Codex 配置时写入 `[model_providers.<provider>]`。
 - `opencode API 地址`：填写后，该 Provider 可用于 opencode。
 - `opencode npm`：可选 `@ai-sdk/openai-compatible`、`@ai-sdk/openai`，也可选择自定义并填写 npm 包名。
-- `代理模式`：默认系统代理模式，支持直连模式、系统代理模式、自定义代理；选择自定义代理时需要填写代理地址。
-- `SSL 证书校验`：默认不勾选。
+- `拉取代理`：仅用于拉取模型，默认系统代理模式，支持直连模式、系统代理模式、自定义代理；选择自定义代理时需要填写代理地址。
+- `校验证书`：仅用于拉取模型，默认不勾选。
 - `模型列表`：每行一个模型，保存时会去重并排序。
 
 ### 拉取模型
@@ -49,7 +49,7 @@ Provider 弹窗中的 `拉取模型` 会从当前填写的 API 地址推导基�
 - 直连模式会强制绕过 Node 全局代理，直接连接目标 API 地址。
 - 系统代理模式会优先使用 VS Code 的 `http.proxy`/`http.proxyAuthorization`，没有配置时读取 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`，并遵守 `NO_PROXY`。
 - 自定义代理模式会通过填写的代理地址请求；连接代理服务器本身时也会绕过 Node 全局代理。
-- 拉取模型时始终不校验 SSL 证书。
+- 勾选 `校验证书` 后会校验拉取模型请求中的 SSL 证书；默认不校验。
 - 拉取结果会弹出模型选择窗口，可搜索、勾选、取消勾选。
 - 确认后写回当前模型清单；保存 Provider 时模型列表会去重、排序。
 

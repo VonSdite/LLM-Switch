@@ -509,6 +509,25 @@ export function getManagerHtml(webview: vscode.Webview): string {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      flex-wrap: wrap;
+    }
+    .model-fetch-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .model-fetch-controls .inline-setting {
+      grid-template-columns: auto minmax(150px, 220px);
+    }
+    .model-fetch-controls .inline-setting.custom {
+      grid-template-columns: auto minmax(140px, 190px) minmax(160px, 240px);
+    }
+    .model-fetch-controls .checkbox-line {
+      margin: 0;
+      white-space: nowrap;
     }
     .grid {
       display: grid;
@@ -868,11 +887,18 @@ export function getManagerHtml(webview: vscode.Webview): string {
       .opencode-row,
       .inline-setting,
       .inline-setting.custom,
+      .model-fetch-controls .inline-setting,
+      .model-fetch-controls .inline-setting.custom,
       .model-row,
       .change-row,
       .path-line,
       .page-head {
         grid-template-columns: 1fr;
+      }
+      .section-title-row,
+      .model-fetch-controls {
+        align-items: stretch;
+        justify-content: flex-start;
       }
       .page-head {
         display: grid;
@@ -1358,11 +1384,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 '</div>' +
               '</div>' +
               '<div class="section">' +
-                renderProxyModeField(selected) +
-                '<label class="checkbox-line"><span>SSL 证书校验</span><input id="providerSslCheck" type="checkbox" ' + (selected.sslCheck ? 'checked' : '') + '></label>' +
-              '</div>' +
-              '<div class="section">' +
-                '<div class="section-title-row"><h3 class="section-title">模型列表</h3><button type="button" class="secondary" data-action="provider-model-fetch" ' + (modelFetchBusy ? 'disabled' : '') + '>' + (modelFetchBusy ? '拉取中...' : '拉取模型') + '</button></div>' +
+                '<div class="section-title-row"><h3 class="section-title">模型列表</h3><div class="model-fetch-controls">' +
+                  renderProxyModeField(selected) +
+                  '<label class="checkbox-line"><span>校验证书</span><input id="providerSslCheck" type="checkbox" ' + (selected.sslCheck ? 'checked' : '') + '></label>' +
+                  '<button type="button" class="secondary" data-action="provider-model-fetch" ' + (modelFetchBusy ? 'disabled' : '') + '>' + (modelFetchBusy ? '拉取中...' : '拉取模型') + '</button>' +
+                '</div></div>' +
                 '<textarea id="providerModels" placeholder="每行一个模型，例如&#10;glm-5&#10;gpt-5.5">' + h(selected.models.join('\\n')) + '</textarea>' +
               '</div>' +
             '</div>' +
@@ -1557,6 +1583,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           apiKey: payload.apiKey,
           proxyMode: payload.proxyMode,
           customProxyUrl: payload.customProxyUrl,
+          sslCheck: payload.sslCheck,
           claudeBaseUrl: payload.claudeBaseUrl,
           codexBaseUrl: payload.codexBaseUrl,
           opencodeBaseUrl: payload.opencodeBaseUrl
@@ -2059,7 +2086,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function renderProxyModeField(selected) {
         const custom = selected.proxyMode === 'custom';
         return '<div class="inline-setting ' + (custom ? 'custom' : '') + '">' +
-          '<span class="inline-setting-label">代理模式</span>' +
+          '<span class="inline-setting-label">拉取代理</span>' +
           select('providerProxyMode', [['direct', '直连模式'], ['system', '系统代理模式'], ['custom', '自定义代理']], selected.proxyMode) +
           (custom ? '<input id="providerCustomProxyUrl" value="' + attr(selected.customProxyUrl) + '" placeholder="http://127.0.0.1:7890">' : '') +
         '</div>';
