@@ -89,7 +89,8 @@ export async function saveCodexConfig(context: vscode.ExtensionContext, provider
   modelProviders[providerName] = {
     name: provider.name,
     base_url: provider.codexBaseUrl,
-    wire_api: provider.codexWireApi
+    wire_api: provider.codexWireApi,
+    requires_openai_auth: Boolean(provider.apiKey)
   };
 
   auth.OPENAI_API_KEY = provider.apiKey;
@@ -191,6 +192,7 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
     providerName: '',
     providerBaseUrl: '',
     wireApi: '',
+    requiresOpenAiAuth: null,
     auth: {
       ...authPathInfo,
       path: authPathInfo.path,
@@ -209,6 +211,7 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
     const providerName = stringValue(providerBlock.name);
     const providerBaseUrl = stringValue(providerBlock.base_url);
     const wireApi = stringValue(providerBlock.wire_api);
+    const requiresOpenAiAuth = booleanOrNull(providerBlock.requires_openai_auth);
     const auth = await readJsonConfig(authPathInfo.path, {});
     const openAiApiKey = stringValue(auth.OPENAI_API_KEY);
     const matched = providers.find((provider) => {
@@ -225,6 +228,7 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
       providerName,
       providerBaseUrl,
       wireApi,
+      requiresOpenAiAuth,
       openAiApiKey,
       hasOpenAiApiKey: Boolean(openAiApiKey),
       model
@@ -409,6 +413,10 @@ function objectValue(value: unknown): JsonObject {
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function booleanOrNull(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
 }
 
 function errorMessage(error: unknown): string {

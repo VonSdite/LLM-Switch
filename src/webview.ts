@@ -2007,6 +2007,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           [providerKey + '.name', hasCurrentBlock ? valueLabel(agent.providerName) : '未配置', valueLabel(provider.name)],
           [providerKey + '.base_url', hasCurrentBlock ? valueLabel(agent.providerBaseUrl) : '未配置', valueLabel(provider.codexBaseUrl)],
           [providerKey + '.wire_api', hasCurrentBlock ? valueLabel(agent.wireApi) : '未配置', valueLabel(provider.codexWireApi)],
+          [providerKey + '.requires_openai_auth', hasCurrentBlock ? booleanLabel(agent.requiresOpenAiAuth) : '未配置', booleanLabel(Boolean(provider.apiKey))],
           ['auth.json.OPENAI_API_KEY', valueLabel(agent.openAiApiKey), valueLabel(provider.apiKey)]
         ];
 
@@ -2063,6 +2064,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function valueLabel(value) {
         const text = String(value || '').trim();
         return text ? text : '未配置';
+      }
+
+      function booleanLabel(value) {
+        return typeof value === 'boolean' ? String(value) : '未配置';
       }
 
       function countLabel(value) {

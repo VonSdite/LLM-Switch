@@ -100,12 +100,14 @@ Codex 页面会写入 `config.toml`：
 - `[model_providers.<provider>].name`
 - `[model_providers.<provider>].base_url`
 - `[model_providers.<provider>].wire_api`
+- `[model_providers.<provider>].requires_openai_auth`
 
 Codex 页面还会写入 `auth.json`：
 
 - `OPENAI_API_KEY`
 
 Codex 的 `model_provider` 和 `[model_providers.<provider>]` 使用 Provider 名称。
+Provider 配置了 API key 时，`requires_openai_auth` 写入 `true`；API key 为空时写入 `false`。
 
 ### opencode
 

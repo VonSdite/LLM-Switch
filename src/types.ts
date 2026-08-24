@@ -51,6 +51,7 @@ export interface CodexAgentState extends AgentConfigFileState {
   providerName: string;
   providerBaseUrl: string;
   wireApi: string;
+  requiresOpenAiAuth: boolean | null;
   auth: AgentConfigFileState;
   openAiApiKey: string;
   hasOpenAiApiKey: boolean;
