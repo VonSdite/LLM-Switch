@@ -12,6 +12,24 @@ export const CLAUDE_MODEL_KEYS = [
 
 export type ClaudeModelKey = typeof CLAUDE_MODEL_KEYS[number];
 
+export interface ProviderModelConfig {
+  id: string;
+  contextWindow?: number;
+  compactThresholdPercent?: number;
+  maxOutputTokens?: number;
+}
+
+export type ClaudeSettingMode = 'unset' | 'enabled' | 'disabled';
+
+export interface ClaudeRuntimeSettings {
+  autoCompactPctOverride?: number;
+  attributionHeader: ClaudeSettingMode;
+  disableNonessentialTraffic: ClaudeSettingMode;
+  experimentalAgentTeams: ClaudeSettingMode;
+  enableToolSearch: ClaudeSettingMode;
+  sandbox: ClaudeSettingMode;
+}
+
 export interface ProviderConfig {
   id: string;
   key: string;
@@ -20,7 +38,7 @@ export interface ProviderConfig {
   proxyMode: ProxyMode;
   customProxyUrl: string;
   sslCheck: boolean;
-  models: string[];
+  models: ProviderModelConfig[];
   claudeBaseUrl: string;
   codexBaseUrl: string;
   codexWireApi: CodexWireApi;
@@ -35,6 +53,7 @@ export interface AgentConfigFileState {
   usesDefaultPath: boolean;
   exists: boolean;
   parseError?: string;
+  managedPaths?: string[];
 }
 
 export interface ClaudeAgentState extends AgentConfigFileState {
@@ -43,6 +62,8 @@ export interface ClaudeAgentState extends AgentConfigFileState {
   authToken: string;
   hasAuthToken: boolean;
   models: Record<ClaudeModelKey, string>;
+  autoCompactWindow: number | null;
+  runtimeSettings: ClaudeRuntimeSettings;
 }
 
 export interface CodexAgentState extends AgentConfigFileState {
@@ -56,6 +77,8 @@ export interface CodexAgentState extends AgentConfigFileState {
   openAiApiKey: string;
   hasOpenAiApiKey: boolean;
   model: string;
+  modelContextWindow: number | null;
+  modelAutoCompactTokenLimit: number | null;
 }
 
 export interface OpencodeAgentState extends AgentConfigFileState {
@@ -68,6 +91,9 @@ export interface OpencodeAgentState extends AgentConfigFileState {
   hasProviderApiKey: boolean;
   providerModelCount: number;
   model: string;
+  modelContextWindow: number | null;
+  maxOutputTokens: number | null;
+  compactionReserved: number | null;
 }
 
 export interface AgentsState {
@@ -84,6 +110,7 @@ export interface WebviewState {
 export interface SaveClaudePayload {
   providerId: string;
   models: Record<ClaudeModelKey, string>;
+  runtimeSettings: ClaudeRuntimeSettings;
 }
 
 export interface SaveCodexPayload {

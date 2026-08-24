@@ -2,7 +2,7 @@
   "name": "llm-switch",
   "displayName": "LLM-Switch",
   "description": "Unified AI provider and agent model configuration manager for Claude, Codex, and opencode.",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "publisher": "VonSdite",
   "license": "MIT",
   "icon": "icon.png",
@@ -34,7 +34,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile"
+    "test": "npm run compile && node --test dist/*.test.js"
   },
   "contributes": {
     "commands": [

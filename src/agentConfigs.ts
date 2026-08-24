@@ -4,11 +4,15 @@ import * as TOML from '@iarna/toml';
 import * as vscode from 'vscode';
 import { parse as parseJsonc, ParseError, printParseErrorCode } from 'jsonc-parser';
 import { ConfigPathTarget, getAgentConfigPath, getAgentConfigPathInfo, getCodexAuthConfigPath, getCodexAuthConfigPathInfo, getConfigPath } from './configPaths';
-import { findProvider } from './providerStore';
+import { ManagedField, managedTargetId, readManagedFields, readManagedPaths, reconcileManagedFields, updateManagedFields } from './managedAgentConfig';
+import { calculateModelLimits } from './modelPresets';
+import { findProvider, findProviderModel } from './providerStore';
 import {
   AgentsState,
   CLAUDE_MODEL_KEYS,
   ClaudeAgentState,
+  ClaudeRuntimeSettings,
+  ClaudeSettingMode,
   CodexAgentState,
   OpencodeAgentState,
   ProviderConfig,
@@ -52,21 +56,44 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
   const filePath = await getAgentConfigPath(context, 'claude');
   await requireExistingConfigFile(filePath);
   const config = await readJsonConfig(filePath, { env: {} });
-  const env = ensureObject(config, 'env');
-
-  env.ANTHROPIC_BASE_URL = provider.claudeBaseUrl;
-  env.ANTHROPIC_AUTH_TOKEN = provider.apiKey;
-
+  const desired: ManagedField[] = [managedField(['env', 'ANTHROPIC_BASE_URL'], provider.claudeBaseUrl)];
+  if (provider.apiKey) {
+    desired.push(managedField(['env', 'ANTHROPIC_AUTH_TOKEN'], provider.apiKey));
+  }
   for (const key of CLAUDE_MODEL_KEYS) {
     const model = payload.models[key]?.trim();
     if (model) {
-      env[key] = model;
-    } else {
-      delete env[key];
+      desired.push(managedField(['env', key], model));
     }
   }
 
+  const mainModel = payload.models.ANTHROPIC_MODEL?.trim()
+    || CLAUDE_MODEL_KEYS.map((key) => payload.models[key]?.trim()).find(Boolean)
+    || '';
+  const modelConfig = mainModel ? findProviderModel(provider, mainModel) : undefined;
+  const compactAtTokens = modelConfig ? calculateModelLimits(modelConfig).compactAtTokens : undefined;
+  if (compactAtTokens !== undefined) {
+    if (compactAtTokens < 100_000 || compactAtTokens > 1_000_000) {
+      throw new Error(`Claude autoCompactWindow 必须在 100000-1000000 之间；模型 ${modelConfig?.id} 当前换算为 ${compactAtTokens}。`);
+    }
+    desired.push(managedField(['autoCompactWindow'], compactAtTokens));
+  }
+
+  const runtimeSettings = normalizeClaudeRuntimeSettings(payload.runtimeSettings);
+  if (runtimeSettings.autoCompactPctOverride !== undefined) {
+    desired.push(managedField(['env', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE'], String(runtimeSettings.autoCompactPctOverride)));
+  }
+  pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_ATTRIBUTION_HEADER'], runtimeSettings.attributionHeader, '1', '0');
+  pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'], runtimeSettings.disableNonessentialTraffic, '1', '0');
+  pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'], runtimeSettings.experimentalAgentTeams, '1', '0');
+  pushClaudeModeField(desired, ['env', 'ENABLE_TOOL_SEARCH'], runtimeSettings.enableToolSearch, 'true', 'false');
+  pushClaudeModeField(desired, ['sandbox', 'enabled'], runtimeSettings.sandbox, true, false);
+
+  const targetId = managedTargetId('claude', filePath);
+  reconcileManagedFields(config, await readManagedFields(context, targetId), desired);
+
   await writeText(filePath, `${JSON.stringify(config, null, 2)}\n`);
+  await updateManagedFields(context, [{ targetId, fields: desired }]);
 }
 
 export async function saveCodexConfig(context: vscode.ExtensionContext, providers: ProviderConfig[], payload: SaveCodexPayload): Promise<void> {
@@ -82,21 +109,34 @@ export async function saveCodexConfig(context: vscode.ExtensionContext, provider
   const authPath = await getCodexAuthConfigPath(context);
   const auth = await readJsonConfig(authPath, {});
   const providerName = provider.name;
-  config.model_provider = providerName;
-  config.model = model;
-
-  const modelProviders = ensureObject(config, 'model_providers');
-  modelProviders[providerName] = {
-    name: provider.name,
-    base_url: provider.codexBaseUrl,
-    wire_api: provider.codexWireApi,
-    requires_openai_auth: Boolean(provider.apiKey)
-  };
-
-  auth.OPENAI_API_KEY = provider.apiKey;
+  const configDesired: ManagedField[] = [
+    managedField(['model_provider'], providerName),
+    managedField(['model'], model),
+    managedField(['model_providers', providerName, 'name'], provider.name),
+    managedField(['model_providers', providerName, 'base_url'], provider.codexBaseUrl),
+    managedField(['model_providers', providerName, 'wire_api'], provider.codexWireApi),
+    managedField(['model_providers', providerName, 'requires_openai_auth'], Boolean(provider.apiKey))
+  ];
+  const modelConfig = findProviderModel(provider, model);
+  if (modelConfig?.contextWindow) {
+    configDesired.push(managedField(['model_context_window'], modelConfig.contextWindow));
+    const compactAtTokens = calculateModelLimits(modelConfig).compactAtTokens;
+    if (compactAtTokens !== undefined) {
+      configDesired.push(managedField(['model_auto_compact_token_limit'], compactAtTokens));
+    }
+  }
+  const authDesired = provider.apiKey ? [managedField(['OPENAI_API_KEY'], provider.apiKey)] : [];
+  const configTargetId = managedTargetId('codex', filePath);
+  const authTargetId = managedTargetId('codexAuth', authPath);
+  reconcileManagedFields(config, await readManagedFields(context, configTargetId), configDesired);
+  reconcileManagedFields(auth, await readManagedFields(context, authTargetId), authDesired);
 
   await writeText(filePath, `${TOML.stringify(config as never)}\n`);
   await writeText(authPath, `${JSON.stringify(auth, null, 2)}\n`);
+  await updateManagedFields(context, [
+    { targetId: configTargetId, fields: configDesired },
+    { targetId: authTargetId, fields: authDesired }
+  ]);
 }
 
 export async function saveOpencodeConfig(context: vscode.ExtensionContext, providers: ProviderConfig[], payload: SaveOpencodePayload): Promise<void> {
@@ -104,6 +144,10 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
   const model = payload.model.trim();
   if (!model) {
     throw new Error('请选择 opencode 模型。');
+  }
+  const selectedModelConfig = findProviderModel(provider, model);
+  if (!selectedModelConfig?.contextWindow || !selectedModelConfig.maxOutputTokens) {
+    throw new Error(`opencode 模型 ${model} 需要同时配置上下文窗口和最大输出。`);
   }
 
   const filePath = await getAgentConfigPath(context, 'opencode');
@@ -113,29 +157,37 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     config.$schema = 'https://opencode.ai/config.json';
   }
 
-  const providerRoot = ensureObject(config, 'provider');
-  const modelNames = provider.models.includes(model) ? provider.models : [model, ...provider.models];
-  const models: JsonObject = {};
-  for (const name of modelNames) {
-    models[name] = { name };
+  const desired: ManagedField[] = [
+    managedField(['model'], `${provider.key}/${model}`),
+    managedField(['provider', provider.key, 'npm'], provider.opencodeNpm),
+    managedField(['provider', provider.key, 'name'], provider.name),
+    managedField(['provider', provider.key, 'options', 'baseURL'], provider.opencodeBaseUrl)
+  ];
+  const reserved = calculateModelLimits(selectedModelConfig).reserved;
+  if (reserved !== undefined) {
+    desired.push(managedField(['compaction', 'reserved'], reserved));
   }
-
-  const options: JsonObject = {
-    baseURL: provider.opencodeBaseUrl
-  };
   if (provider.apiKey) {
-    options.apiKey = provider.apiKey;
+    desired.push(managedField(['provider', provider.key, 'options', 'apiKey'], provider.apiKey));
+  }
+  for (const configuredModel of provider.models) {
+    if (!configuredModel.contextWindow || !configuredModel.maxOutputTokens) {
+      continue;
+    }
+    desired.push(managedField(['provider', provider.key, 'models', configuredModel.id], {
+      name: configuredModel.id,
+      limit: {
+        context: configuredModel.contextWindow,
+        output: configuredModel.maxOutputTokens
+      }
+    }));
   }
 
-  providerRoot[provider.key] = {
-    npm: provider.opencodeNpm,
-    name: provider.name,
-    options,
-    models
-  };
-  config.model = `${provider.key}/${model}`;
+  const targetId = managedTargetId('opencode', filePath);
+  reconcileManagedFields(config, await readManagedFields(context, targetId), desired);
 
   await writeText(filePath, `${JSON.stringify(config, null, 2)}\n`);
+  await updateManagedFields(context, [{ targetId, fields: desired }]);
 }
 
 async function readClaudeState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<ClaudeAgentState> {
@@ -150,7 +202,9 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
     baseUrl: '',
     authToken: '',
     hasAuthToken: false,
-    models: emptyClaudeModels()
+    models: emptyClaudeModels(),
+    autoCompactWindow: null,
+    runtimeSettings: emptyClaudeRuntimeSettings()
   };
 
   try {
@@ -158,6 +212,7 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
     const env = objectValue(config.env);
     const baseUrl = stringValue(env.ANTHROPIC_BASE_URL);
     const authToken = stringValue(env.ANTHROPIC_AUTH_TOKEN);
+    const targetId = managedTargetId('claude', filePath);
     const matched = providers.find((provider) => provider.claudeBaseUrl && sameUrl(provider.claudeBaseUrl, baseUrl));
     return {
       ...baseState,
@@ -167,7 +222,17 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
       hasAuthToken: Boolean(authToken),
       models: Object.fromEntries(
         CLAUDE_MODEL_KEYS.map((key) => [key, stringValue(env[key])])
-      ) as ClaudeAgentState['models']
+      ) as ClaudeAgentState['models'],
+      autoCompactWindow: numberOrNull(config.autoCompactWindow),
+      runtimeSettings: {
+        autoCompactPctOverride: positiveIntegerOrUndefined(env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE),
+        attributionHeader: claudeModeFromValue(env.CLAUDE_CODE_ATTRIBUTION_HEADER, '1', '0'),
+        disableNonessentialTraffic: claudeModeFromValue(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1', '0'),
+        experimentalAgentTeams: claudeModeFromValue(env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1', '0'),
+        enableToolSearch: claudeModeFromValue(env.ENABLE_TOOL_SEARCH, 'true', 'false'),
+        sandbox: claudeModeFromValue(objectValue(config.sandbox).enabled, true, false)
+      },
+      managedPaths: await readManagedPaths(context, targetId, config)
     };
   } catch (error) {
     return {
@@ -200,7 +265,9 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
     },
     openAiApiKey: '',
     hasOpenAiApiKey: false,
-    model: ''
+    model: '',
+    modelContextWindow: null,
+    modelAutoCompactTokenLimit: null
   };
 
   try {
@@ -214,6 +281,8 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
     const requiresOpenAiAuth = booleanOrNull(providerBlock.requires_openai_auth);
     const auth = await readJsonConfig(authPathInfo.path, {});
     const openAiApiKey = stringValue(auth.OPENAI_API_KEY);
+    const configTargetId = managedTargetId('codex', filePath);
+    const authTargetId = managedTargetId('codexAuth', authPathInfo.path);
     const matched = providers.find((provider) => {
       if (!provider.codexBaseUrl) {
         return false;
@@ -231,7 +300,14 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
       requiresOpenAiAuth,
       openAiApiKey,
       hasOpenAiApiKey: Boolean(openAiApiKey),
-      model
+      model,
+      modelContextWindow: numberOrNull(config.model_context_window),
+      modelAutoCompactTokenLimit: numberOrNull(config.model_auto_compact_token_limit),
+      managedPaths: await readManagedPaths(context, configTargetId, config),
+      auth: {
+        ...baseState.auth,
+        managedPaths: await readManagedPaths(context, authTargetId, auth)
+      }
     };
   } catch (error) {
     return {
@@ -257,7 +333,10 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
     providerApiKey: '',
     hasProviderApiKey: false,
     providerModelCount: 0,
-    model: ''
+    model: '',
+    modelContextWindow: null,
+    maxOutputTokens: null,
+    compactionReserved: null
   };
 
   try {
@@ -271,6 +350,9 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
     const providerBaseUrl = stringValue(providerOptions.baseURL);
     const providerApiKey = stringValue(providerOptions.apiKey);
     const providerModels = objectValue(providerBlock.models);
+    const selectedModelBlock = objectValue(providerModels[model]);
+    const selectedLimit = objectValue(selectedModelBlock.limit);
+    const targetId = managedTargetId('opencode', filePath);
     const matched = providers.find((provider) => {
       if (!provider.opencodeBaseUrl) {
         return false;
@@ -288,7 +370,11 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
       providerApiKey,
       hasProviderApiKey: Boolean(providerApiKey),
       providerModelCount: Object.keys(providerModels).length,
-      model
+      model,
+      modelContextWindow: numberOrNull(selectedLimit.context),
+      maxOutputTokens: numberOrNull(selectedLimit.output),
+      compactionReserved: numberOrNull(objectValue(config.compaction).reserved),
+      managedPaths: await readManagedPaths(context, targetId, config)
     };
   } catch (error) {
     return {
@@ -327,14 +413,6 @@ async function readTomlConfig(filePath: string, fallback: JsonObject): Promise<J
     throw new Error('配置文件必须是 TOML object。');
   }
   return parsed as JsonObject;
-}
-
-function ensureObject(parent: JsonObject, key: string): JsonObject {
-  const current = parent[key];
-  if (!current || typeof current !== 'object' || Array.isArray(current)) {
-    parent[key] = {};
-  }
-  return parent[key] as JsonObject;
 }
 
 async function requireExistingConfigFile(filePath: string): Promise<void> {
@@ -417,6 +495,69 @@ function stringValue(value: unknown): string {
 
 function booleanOrNull(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function positiveIntegerOrUndefined(value: unknown): number | undefined {
+  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+function managedField(path: string[], value: unknown): ManagedField {
+  return { path, value };
+}
+
+function pushClaudeModeField<T>(fields: ManagedField[], path: string[], mode: ClaudeSettingMode, enabledValue: T, disabledValue: T): void {
+  if (mode === 'enabled') {
+    fields.push(managedField(path, enabledValue));
+  } else if (mode === 'disabled') {
+    fields.push(managedField(path, disabledValue));
+  }
+}
+
+function normalizeClaudeRuntimeSettings(value: unknown): ClaudeRuntimeSettings {
+  const raw = objectValue(value);
+  const autoCompactPctOverride = raw.autoCompactPctOverride === undefined || raw.autoCompactPctOverride === null || raw.autoCompactPctOverride === ''
+    ? undefined
+    : Number(raw.autoCompactPctOverride);
+  if (autoCompactPctOverride !== undefined && (!Number.isInteger(autoCompactPctOverride) || autoCompactPctOverride < 1 || autoCompactPctOverride > 99)) {
+    throw new Error('Claude 自动压缩比例覆盖必须是 1-99 的整数百分比。');
+  }
+  return {
+    autoCompactPctOverride,
+    attributionHeader: normalizeClaudeMode(raw.attributionHeader),
+    disableNonessentialTraffic: normalizeClaudeMode(raw.disableNonessentialTraffic),
+    experimentalAgentTeams: normalizeClaudeMode(raw.experimentalAgentTeams),
+    enableToolSearch: normalizeClaudeMode(raw.enableToolSearch),
+    sandbox: normalizeClaudeMode(raw.sandbox)
+  };
+}
+
+function emptyClaudeRuntimeSettings(): ClaudeRuntimeSettings {
+  return {
+    attributionHeader: 'unset',
+    disableNonessentialTraffic: 'unset',
+    experimentalAgentTeams: 'unset',
+    enableToolSearch: 'unset',
+    sandbox: 'unset'
+  };
+}
+
+function normalizeClaudeMode(value: unknown): ClaudeSettingMode {
+  return value === 'enabled' || value === 'disabled' ? value : 'unset';
+}
+
+function claudeModeFromValue<T>(value: unknown, enabledValue: T, disabledValue: T): ClaudeSettingMode {
+  if (value === enabledValue) {
+    return 'enabled';
+  }
+  if (value === disabledValue) {
+    return 'disabled';
+  }
+  return 'unset';
 }
 
 function errorMessage(error: unknown): string {

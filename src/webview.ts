@@ -529,6 +529,92 @@ export function getManagerHtml(webview: vscode.Webview): string {
       margin: 0;
       white-space: nowrap;
     }
+    .model-ledger {
+      display: grid;
+      gap: 7px;
+    }
+    .model-ledger-head,
+    .model-ledger-main {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.8fr) minmax(130px, 0.8fr) minmax(118px, 0.65fr) minmax(130px, 0.8fr) 34px;
+      gap: 7px;
+      align-items: center;
+    }
+    .model-ledger-head {
+      padding: 0 7px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .model-ledger-row {
+      display: grid;
+      gap: 7px;
+      padding: 7px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 5px;
+      background: var(--vscode-editor-background);
+    }
+    .model-ledger-row.has-warning {
+      border-color: var(--vscode-inputValidation-warningBorder);
+    }
+    .model-ledger-remove {
+      width: 30px;
+      min-height: 30px;
+      padding: 0;
+    }
+    .model-suggestion-strip {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+      padding: 5px 7px;
+      border-left: 2px solid var(--vscode-focusBorder);
+      background: var(--vscode-textCodeBlock-background, transparent);
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+    }
+    .model-suggestion-source {
+      margin-right: 3px;
+      color: var(--vscode-foreground);
+    }
+    .candidate-button {
+      min-height: 23px;
+      padding: 2px 6px;
+      border-color: var(--vscode-panel-border);
+      background: transparent;
+      color: var(--vscode-foreground);
+      font-size: 11px;
+    }
+    .candidate-button:hover {
+      background: var(--vscode-toolbar-hoverBackground);
+    }
+    .model-warning {
+      color: var(--vscode-inputValidation-warningForeground);
+    }
+    .model-ledger-actions,
+    .model-batch-actions,
+    .runtime-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .model-batch {
+      display: grid;
+      gap: 7px;
+      padding: 9px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 5px;
+    }
+    .model-batch textarea {
+      min-height: 90px;
+    }
+    .runtime-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: end;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -724,7 +810,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
     }
     .change-row {
       display: grid;
-      grid-template-columns: minmax(260px, 0.95fr) minmax(260px, 1fr);
+      grid-template-columns: minmax(230px, 0.9fr) minmax(260px, 1fr) 72px;
       gap: 10px;
       align-items: center;
     }
@@ -756,6 +842,23 @@ export function getManagerHtml(webview: vscode.Webview): string {
       color: var(--vscode-focusBorder);
       font-weight: 650;
     }
+    .change-status {
+      justify-self: end;
+      padding: 2px 6px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 999px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .change-status.write {
+      border-color: var(--vscode-focusBorder);
+      color: var(--vscode-foreground);
+    }
+    .change-status.delete {
+      border-color: var(--vscode-inputValidation-warningBorder);
+      color: var(--vscode-inputValidation-warningForeground);
+    }
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -767,7 +870,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       overflow: auto;
     }
     .modal {
-      width: 920px;
+      width: 1120px;
       max-width: none;
       max-height: min(86vh, 920px);
       display: grid;
@@ -890,10 +993,16 @@ export function getManagerHtml(webview: vscode.Webview): string {
       .model-fetch-controls .inline-setting,
       .model-fetch-controls .inline-setting.custom,
       .model-row,
+      .model-ledger-head,
+      .model-ledger-main,
+      .runtime-grid,
       .change-row,
       .path-line,
       .page-head {
         grid-template-columns: 1fr;
+      }
+      .model-ledger-head {
+        display: none;
       }
       .section-title-row,
       .model-fetch-controls {
@@ -953,6 +1062,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       let drafts = {
         claudeProviderId: null,
         claudeModels: {},
+        claudeRuntimeSettings: null,
         codexProviderId: null,
         codexModel: null,
         opencodeProviderId: null,
@@ -965,6 +1075,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
       let draggedProviderId = null;
       let dragOverProviderId = null;
       let searchSelectState = null;
+      let providerBatchOpen = false;
+      let modelSuggestions = {};
+      let suggestionRequestSerial = 0;
+      let suggestionRequests = {};
+      let modelSuggestionDebounce = null;
 
       window.addEventListener('message', function (event) {
         const message = event.data;
@@ -979,6 +1094,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
           modelFetchBusy = false;
           openModelPicker(message.models || [], message.sourceUrl || '');
           render();
+        }
+        if (message.type === 'modelParameterSuggestions') {
+          const requestedModelId = suggestionRequests[message.requestId];
+          delete suggestionRequests[message.requestId];
+          if (requestedModelId && message.suggestions) {
+            modelSuggestions[requestedModelId] = message.suggestions;
+            updateModelSuggestionDom(requestedModelId);
+          }
         }
         if (message.type === 'error') {
           modelFetchBusy = false;
@@ -1048,6 +1171,30 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (action === 'provider-model-fetch') {
           fetchProviderModelsFromModal();
+        }
+        if (action === 'provider-model-add') {
+          updateProviderModalDraftFromForm();
+          providerModal.models.push({ id: '' });
+          render();
+        }
+        if (action === 'provider-model-remove') {
+          updateProviderModalDraftFromForm();
+          providerModal.models.splice(Number(button.getAttribute('data-model-index')), 1);
+          render();
+        }
+        if (action === 'provider-model-batch-toggle') {
+          updateProviderModalDraftFromForm();
+          providerBatchOpen = !providerBatchOpen;
+          render();
+        }
+        if (action === 'provider-model-batch-apply') {
+          applyBatchModelIds();
+        }
+        if (action === 'model-candidate-apply') {
+          applyModelCandidate(button);
+        }
+        if (action === 'model-candidate-fill') {
+          fillModelCandidate(button);
         }
         if (action === 'provider-api-key-toggle') {
           toggleProviderApiKey(button);
@@ -1136,6 +1283,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
           drafts.claudeModels[target.id.slice('claudeModel_'.length)] = target.value;
           render();
         }
+        if (target.dataset && target.dataset.claudeRuntimeSetting) {
+          drafts.claudeRuntimeSettings = collectClaudeRuntimeSettings();
+          render();
+        }
         if (target.id === 'codexProviderSelect') {
           drafts.codexProviderId = target.value;
           drafts.codexModel = null;
@@ -1162,6 +1313,13 @@ export function getManagerHtml(webview: vscode.Webview): string {
           updateProviderModalDraftFromForm();
           render();
         }
+        if (target.dataset && target.dataset.providerModelField) {
+          updateProviderModelDraftFromInput(target);
+          if (target.dataset.providerModelField === 'id') {
+            requestModelSuggestions(target.value);
+          }
+          updateModelRowWarning(Number(target.dataset.modelIndex));
+        }
       });
 
       document.addEventListener('input', function (event) {
@@ -1173,6 +1331,16 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (target && target.id === 'modelPickerSearch') {
           updateModelPickerDom();
+        }
+        if (target && target.dataset && target.dataset.claudeRuntimeSetting) {
+          drafts.claudeRuntimeSettings = collectClaudeRuntimeSettings();
+        }
+        if (target && target.dataset && target.dataset.providerModelField) {
+          updateProviderModelDraftFromInput(target);
+          if (target.dataset.providerModelField === 'id') {
+            scheduleModelSuggestions(target.value);
+          }
+          updateModelRowWarning(Number(target.dataset.modelIndex));
         }
       });
 
@@ -1284,6 +1452,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         const content = activeTab === 'providers' ? renderProviders() : renderAgents();
         app.innerHTML = content + renderProviderModal() + renderModelPickerModal();
+        if (providerModal) {
+          setTimeout(requestSuggestionsForDraftModels, 0);
+        }
       }
 
       function renderTabs() {
@@ -1389,7 +1560,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
                   '<label class="checkbox-line"><span>校验证书</span><input id="providerSslCheck" type="checkbox" ' + (selected.sslCheck ? 'checked' : '') + '></label>' +
                   '<button type="button" class="secondary" data-action="provider-model-fetch" ' + (modelFetchBusy ? 'disabled' : '') + '>' + (modelFetchBusy ? '拉取中...' : '拉取模型') + '</button>' +
                 '</div></div>' +
-                '<textarea id="providerModels" placeholder="每行一个模型，例如&#10;glm-5&#10;gpt-5.5">' + h(selected.models.join('\\n')) + '</textarea>' +
+                '<div class="model-ledger-actions">' +
+                  '<button type="button" class="secondary" data-action="provider-model-add">添加模型</button>' +
+                  '<button type="button" class="ghost" data-action="provider-model-batch-toggle">' + (providerBatchOpen ? '收起批量编辑' : '批量编辑模型 ID') + '</button>' +
+                '</div>' +
+                (providerBatchOpen ? renderModelBatchEditor(selected.models) : '') +
+                renderProviderModelLedger(selected.models) +
               '</div>' +
             '</div>' +
             '<footer class="modal-foot">' +
@@ -1398,6 +1574,104 @@ export function getManagerHtml(webview: vscode.Webview): string {
             '</footer>' +
           '</section>' +
         '</div>';
+      }
+
+      function renderProviderModelLedger(models) {
+        const items = models || [];
+        if (!items.length) {
+          return '<div class="empty">还没有模型。添加模型 ID 后会显示上下文、压缩阈值和最大输出候选。</div>';
+        }
+        return '<div class="model-ledger">' +
+          '<div class="model-ledger-head"><span>模型 ID</span><span>上下文窗口</span><span>压缩阈值 %</span><span>最大输出</span><span></span></div>' +
+          items.map(function (model, index) {
+            const warning = modelParameterWarning(model);
+            return '<div class="model-ledger-row ' + (warning ? 'has-warning' : '') + '" data-model-row-index="' + index + '">' +
+              '<div class="model-ledger-main">' +
+                modelParameterInput(index, 'id', model.id || '', '例如 glm-5.3', 'text') +
+                modelParameterInput(index, 'contextWindow', model.contextWindow || '', '例如 128000', 'number') +
+                modelParameterInput(index, 'compactThresholdPercent', model.compactThresholdPercent === undefined ? '' : model.compactThresholdPercent, '选择候选或手动填写', 'number', '1', '99') +
+                modelParameterInput(index, 'maxOutputTokens', model.maxOutputTokens || '', '例如 32000', 'number') +
+                '<button type="button" class="ghost model-ledger-remove" data-action="provider-model-remove" data-model-index="' + index + '" title="删除模型" aria-label="删除模型">×</button>' +
+              '</div>' +
+              '<div data-model-suggestion-for="' + attr(model.id || '') + '">' + renderModelSuggestion(model, index) + '</div>' +
+              '<div class="model-warning" data-model-warning="' + index + '" ' + (warning ? '' : 'hidden') + '>' + h(warning) + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      }
+
+      function modelParameterInput(index, fieldName, currentValue, placeholder, type, min, max) {
+        return '<input id="providerModel_' + index + '_' + fieldName + '" type="' + attr(type) + '" value="' + attr(currentValue) + '" placeholder="' + attr(placeholder) + '" ' +
+          (type === 'number' ? 'step="1" ' : '') + (min ? 'min="' + attr(min) + '" ' : '') + (max ? 'max="' + attr(max) + '" ' : '') +
+          'data-provider-model-field="' + attr(fieldName) + '" data-model-index="' + index + '" autocomplete="off" spellcheck="false">';
+      }
+
+      function renderModelBatchEditor(models) {
+        return '<div class="model-batch">' +
+          '<span class="muted small">每行一个模型 ID。应用后按 ID 保留已有参数，新增模型的参数保持空白。</span>' +
+          '<textarea id="providerModelBatchIds" placeholder="glm-5.3&#10;deepseek-v4-pro">' + h((models || []).map(function (model) { return model.id; }).join('\\n')) + '</textarea>' +
+          '<div class="model-batch-actions"><button type="button" class="secondary" data-action="provider-model-batch-apply">应用模型 ID</button></div>' +
+        '</div>';
+      }
+
+      function renderModelSuggestion(model, index) {
+        const modelId = String(model.id || '').trim();
+        if (!modelId) {
+          return '<div class="model-suggestion-strip"><span>输入模型 ID 后显示参数候选。</span></div>';
+        }
+        const suggestions = modelSuggestions[modelId];
+        if (!suggestions) {
+          return '<div class="model-suggestion-strip"><span>正在识别模型参数...</span></div>';
+        }
+        const buttons = [];
+        (suggestions.contextWindow || []).forEach(function (candidate) {
+          buttons.push(candidateButton(index, 'contextWindow', candidate, '上下文'));
+        });
+        (suggestions.compactThresholdPercent || []).forEach(function (candidate) {
+          buttons.push(candidateButton(index, 'compactThresholdPercent', candidate, '压缩'));
+        });
+        (suggestions.maxOutputTokens || []).forEach(function (candidate) {
+          buttons.push(candidateButton(index, 'maxOutputTokens', candidate, '输出'));
+        });
+        return '<div class="model-suggestion-strip">' +
+          '<span class="model-suggestion-source">' + h(suggestions.sourceLabel) + '</span>' +
+          buttons.join('') +
+          '<button type="button" class="candidate-button" data-action="model-candidate-fill" data-model-index="' + index + '">填充空项</button>' +
+        '</div>';
+      }
+
+      function candidateButton(index, fieldName, candidate, prefix) {
+        const suffix = fieldName === 'compactThresholdPercent' ? '%' : '';
+        return '<button type="button" class="candidate-button" data-action="model-candidate-apply" data-model-index="' + index + '" data-model-field="' + attr(fieldName) + '" data-model-value="' + attr(candidate.value) + '" title="' + attr(candidate.label) + '">' +
+          h(prefix + ' ' + formatInteger(candidate.value) + suffix) +
+        '</button>';
+      }
+
+      function formatInteger(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number.toLocaleString('en-US') : String(value || '');
+      }
+
+      function modelParameterWarning(model) {
+        const contextWindow = Number(model.contextWindow || 0);
+        const percent = model.compactThresholdPercent;
+        const maxOutput = Number(model.maxOutputTokens || 0);
+        if (percent !== undefined && (!Number.isInteger(Number(percent)) || Number(percent) < 1 || Number(percent) > 99)) {
+          return '压缩阈值必须是 1-99 的整数百分比。';
+        }
+        if (model.contextWindow !== undefined && (!Number.isInteger(Number(model.contextWindow)) || contextWindow <= 0)) {
+          return '上下文窗口必须是正整数。';
+        }
+        if (model.maxOutputTokens !== undefined && (!Number.isInteger(Number(model.maxOutputTokens)) || maxOutput <= 0)) {
+          return '最大输出必须是正整数。';
+        }
+        if (contextWindow > 0 && maxOutput > contextWindow) {
+          return '最大输出不能大于上下文窗口。';
+        }
+        if (contextWindow > 0 && percent !== undefined && maxOutput > contextWindow * (1 - Number(percent) / 100)) {
+          return '压缩阈值预留空间小于最大输出；可以保存，但客户端可能更早压缩。';
+        }
+        return '';
       }
 
       function renderModelPickerModal() {
@@ -1472,14 +1746,21 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const providers = providersFor('claude');
         const selectedId = drafts.claudeProviderId !== null ? drafts.claudeProviderId : agent.selectedProviderId;
         const provider = state.providers.find(function (item) { return item.id === selectedId; });
-        const disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
+        let disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
         const selectedModels = {};
         claudeKeys.forEach(function (key) {
           selectedModels[key] = selectedClaudeModelValue(key, provider, selectedId, agent);
         });
+        const runtimeSettings = drafts.claudeRuntimeSettings || agent.runtimeSettings;
         let notices = renderParseNotice(agent);
         if (provider && provider.models.length === 0) {
           notices += '<div class="notice">该 Provider 还没有模型列表，请先回到 Providers 添加模型。</div>';
+        }
+        const mainModelConfig = findProviderModelConfig(provider, selectedModels.ANTHROPIC_MODEL || firstConfiguredClaudeModel(selectedModels));
+        const mainLimits = mainModelConfig ? calculateModelLimitsClient(mainModelConfig) : {};
+        if (mainLimits.compactAtTokens !== undefined && (mainLimits.compactAtTokens < 100000 || mainLimits.compactAtTokens > 1000000)) {
+          disabled = true;
+          notices += '<div class="notice">Claude autoCompactWindow 当前换算为 ' + h(formatInteger(mainLimits.compactAtTokens)) + '，必须在 100,000-1,000,000 之间。请调整主模型上下文或压缩阈值。</div>';
         }
 
         return '<section class="agent-panel">' +
@@ -1494,9 +1775,26 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 modelSelect('claudeModel_' + key, provider, selectedModels[key], disabled, true) +
               '</div>';
             }).join('') + '</div>' +
-            renderClaudeChangePreview(agent, provider, selectedModels, disabled) +
+            '<h3 class="section-title">运行设置</h3>' +
+            '<div class="runtime-grid">' +
+              fieldWithHelp('自动压缩比例覆盖 %', '写入 CLAUDE_AUTOCOMPACT_PCT_OVERRIDE。留空表示不由插件设置。', '<input id="claudeAutoCompactPctOverride" data-claude-runtime-setting="autoCompactPctOverride" type="number" min="1" max="99" step="1" value="' + attr(runtimeSettings.autoCompactPctOverride || '') + '" placeholder="不设置">') +
+              runtimeModeField('claudeAttributionHeader', 'Attribution Header', runtimeSettings.attributionHeader, 'CLAUDE_CODE_ATTRIBUTION_HEADER') +
+              runtimeModeField('claudeDisableNonessentialTraffic', '禁用非必要流量', runtimeSettings.disableNonessentialTraffic, 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC') +
+              runtimeModeField('claudeExperimentalAgentTeams', '实验性 Agent Teams', runtimeSettings.experimentalAgentTeams, 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS') +
+              runtimeModeField('claudeEnableToolSearch', 'Tool Search', runtimeSettings.enableToolSearch, 'ENABLE_TOOL_SEARCH') +
+              runtimeModeField('claudeSandbox', 'Sandbox', runtimeSettings.sandbox, '原生 sandbox.enabled') +
+            '</div>' +
+            renderClaudeChangePreview(agent, provider, selectedModels, runtimeSettings, disabled) +
           '</div>' +
         '</section>';
+      }
+
+      function runtimeModeField(id, label, selected, settingName) {
+        return fieldWithHelp(label, settingName, select(id, [
+          ['unset', '不设置'],
+          ['enabled', '启用'],
+          ['disabled', '禁用']
+        ], selected || 'unset', false, 'claude-runtime-select').replace('<select ', '<select data-claude-runtime-setting="' + attr(id) + '" '));
       }
 
       function renderCodex() {
@@ -1504,13 +1802,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const providers = providersFor('codex');
         const selectedId = drafts.codexProviderId !== null ? drafts.codexProviderId : agent.selectedProviderId;
         const provider = state.providers.find(function (item) { return item.id === selectedId; });
-        const disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
+        let disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
         const selectedModel = selectedCodexModelValue(provider, selectedId, agent);
         let notices = renderParseNotice(agent);
         if (provider && provider.models.length === 0) {
           notices += '<div class="notice">该 Provider 还没有模型列表，请先回到 Providers 添加模型。</div>';
         }
-
         return '<section class="agent-panel">' +
           renderConfigPath('codex', 'Codex config.toml', agent) +
           renderConfigPath('codexAuth', 'Codex auth.json', agent.auth, true) +
@@ -1529,11 +1826,16 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const providers = providersFor('opencode');
         const selectedId = drafts.opencodeProviderId !== null ? drafts.opencodeProviderId : agent.selectedProviderId;
         const provider = state.providers.find(function (item) { return item.id === selectedId; });
-        const disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
+        let disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
         const selectedModel = selectedOpencodeModelValue(provider, selectedId, agent);
         let notices = renderParseNotice(agent);
         if (provider && provider.models.length === 0) {
           notices += '<div class="notice">该 Provider 还没有模型列表，请先回到 Providers 添加模型。</div>';
+        }
+        const selectedModelConfig = findProviderModelConfig(provider, selectedModel);
+        if (provider && selectedModel && (!selectedModelConfig || !selectedModelConfig.contextWindow || !selectedModelConfig.maxOutputTokens)) {
+          disabled = true;
+          notices += '<div class="notice">opencode 当前模型需要同时配置上下文窗口和最大输出。请先回到 Providers 补齐参数。</div>';
         }
 
         return '<section class="agent-panel">' +
@@ -1553,6 +1855,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
         providerModal = existing ? copyProvider(existing) : emptyProvider();
         modelPicker = null;
         modelFetchBusy = false;
+        providerBatchOpen = false;
+        modelSuggestions = {};
+        suggestionRequests = {};
         render();
       }
 
@@ -1564,6 +1869,174 @@ export function getManagerHtml(webview: vscode.Webview): string {
         providerModal = Object.assign({}, providerModal, payload, {
           id: providerModal.id || payload.id || ''
         });
+      }
+
+      function updateProviderModalModelsFromTable() {
+        if (!providerModal) {
+          return [];
+        }
+        const models = [];
+        const rows = document.querySelectorAll('[data-model-row-index]');
+        if (!rows.length) {
+          return (providerModal.models || []).slice();
+        }
+        rows.forEach(function (row) {
+          const index = Number(row.getAttribute('data-model-row-index'));
+          models.push({
+            id: value('providerModel_' + index + '_id').trim(),
+            contextWindow: optionalIntegerValue('providerModel_' + index + '_contextWindow'),
+            compactThresholdPercent: optionalIntegerValue('providerModel_' + index + '_compactThresholdPercent'),
+            maxOutputTokens: optionalIntegerValue('providerModel_' + index + '_maxOutputTokens')
+          });
+        });
+        providerModal.models = models;
+        return models;
+      }
+
+      function updateProviderModelDraftFromInput(input) {
+        if (!providerModal) {
+          return;
+        }
+        const index = Number(input.dataset.modelIndex);
+        const fieldName = input.dataset.providerModelField;
+        if (!providerModal.models[index]) {
+          return;
+        }
+        providerModal.models[index][fieldName] = fieldName === 'id' ? input.value : optionalIntegerText(input.value);
+        if (fieldName === 'id') {
+          const row = document.querySelector('[data-model-row-index="' + index + '"]');
+          const suggestion = row && row.querySelector('[data-model-suggestion-for]');
+          if (suggestion) {
+            suggestion.setAttribute('data-model-suggestion-for', input.value.trim());
+            suggestion.innerHTML = renderModelSuggestion(providerModal.models[index], index);
+          }
+        }
+      }
+
+      function updateModelRowWarning(index) {
+        if (!providerModal || !providerModal.models[index]) {
+          return;
+        }
+        const warning = modelParameterWarning(providerModal.models[index]);
+        const element = document.querySelector('[data-model-warning="' + index + '"]');
+        const row = document.querySelector('[data-model-row-index="' + index + '"]');
+        if (element) {
+          element.textContent = warning;
+          element.hidden = !warning;
+        }
+        if (row) {
+          row.classList.toggle('has-warning', Boolean(warning));
+        }
+      }
+
+      function requestSuggestionsForDraftModels() {
+        if (!providerModal) {
+          return;
+        }
+        (providerModal.models || []).forEach(function (model) {
+          requestModelSuggestions(model.id);
+        });
+      }
+
+      function requestModelSuggestions(modelId) {
+        const normalized = String(modelId || '').trim();
+        if (!normalized || modelSuggestions[normalized]) {
+          return;
+        }
+        const alreadyPending = Object.keys(suggestionRequests).some(function (requestId) {
+          return suggestionRequests[requestId] === normalized;
+        });
+        if (alreadyPending) {
+          return;
+        }
+        suggestionRequestSerial += 1;
+        const requestId = 'suggestion-' + suggestionRequestSerial;
+        suggestionRequests[requestId] = normalized;
+        post('suggestModelParameters', { requestId: requestId, modelId: normalized });
+      }
+
+      function scheduleModelSuggestions(modelId) {
+        if (modelSuggestionDebounce) {
+          clearTimeout(modelSuggestionDebounce);
+        }
+        modelSuggestionDebounce = setTimeout(function () {
+          modelSuggestionDebounce = null;
+          requestModelSuggestions(modelId);
+        }, 250);
+      }
+
+      function updateModelSuggestionDom(modelId) {
+        if (!providerModal) {
+          return;
+        }
+        (providerModal.models || []).forEach(function (model, index) {
+          if (String(model.id || '').trim() !== modelId) {
+            return;
+          }
+          const element = Array.from(document.querySelectorAll('[data-model-suggestion-for]')).find(function (candidate) {
+            return candidate.getAttribute('data-model-suggestion-for') === modelId
+              && candidate.closest('[data-model-row-index]').getAttribute('data-model-row-index') === String(index);
+          });
+          if (element) {
+            element.innerHTML = renderModelSuggestion(model, index);
+          }
+        });
+      }
+
+      function applyModelCandidate(button) {
+        updateProviderModalModelsFromTable();
+        const index = Number(button.getAttribute('data-model-index'));
+        const fieldName = button.getAttribute('data-model-field') || '';
+        const nextValue = Number(button.getAttribute('data-model-value'));
+        if (!providerModal || !providerModal.models[index] || !fieldName || !Number.isInteger(nextValue)) {
+          return;
+        }
+        providerModal.models[index][fieldName] = nextValue;
+        const input = document.getElementById('providerModel_' + index + '_' + fieldName);
+        if (input) {
+          input.value = String(nextValue);
+        }
+        updateModelRowWarning(index);
+      }
+
+      function fillModelCandidate(button) {
+        updateProviderModalModelsFromTable();
+        const index = Number(button.getAttribute('data-model-index'));
+        const model = providerModal && providerModal.models[index];
+        const suggestions = model && modelSuggestions[String(model.id || '').trim()];
+        if (!model || !suggestions) {
+          return;
+        }
+        ['contextWindow', 'compactThresholdPercent', 'maxOutputTokens'].forEach(function (fieldName) {
+          if (model[fieldName]) {
+            return;
+          }
+          const candidates = suggestions[fieldName] || [];
+          if (candidates.length) {
+            model[fieldName] = Number(candidates[0].value);
+            const input = document.getElementById('providerModel_' + index + '_' + fieldName);
+            if (input) {
+              input.value = String(model[fieldName]);
+            }
+          }
+        });
+        updateModelRowWarning(index);
+      }
+
+      function applyBatchModelIds() {
+        updateProviderModalDraftFromForm();
+        const ids = parseModelIds(value('providerModelBatchIds'));
+        const currentById = {};
+        (providerModal.models || []).forEach(function (model) {
+          if (model.id) {
+            currentById[model.id] = model;
+          }
+        });
+        providerModal.models = ids.map(function (id) {
+          return currentById[id] || { id: id };
+        });
+        providerBatchOpen = false;
+        render();
       }
 
       function fetchProviderModelsFromModal() {
@@ -1596,7 +2069,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         updateProviderModalDraftFromForm();
         const fetched = dedupeModels(models);
-        const existingModels = dedupeModels(providerModal.models || []);
+        const existingModels = dedupeModels((providerModal.models || []).map(function (model) { return model.id; }));
         const existing = {};
         existingModels.forEach(function (model) { existing[model] = true; });
         const selected = {};
@@ -1666,19 +2139,17 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (!modelPicker) {
           return;
         }
-        const textarea = document.getElementById('providerModels');
-        if (!textarea) {
-          modelPicker = null;
-          render();
-          return;
-        }
-        const currentModels = parseModelText(textarea.value);
+        updateProviderModalModelsFromTable();
+        const currentModels = (providerModal.models || []).slice();
         const fetchedMap = {};
         modelPicker.models.forEach(function (model) { fetchedMap[model] = true; });
-        const retainedModels = currentModels.filter(function (model) { return !fetchedMap[model]; });
+        const retainedModels = currentModels.filter(function (model) { return !fetchedMap[model.id]; });
+        const currentById = {};
+        currentModels.forEach(function (model) { currentById[model.id] = model; });
         const selectedModels = modelPicker.models.filter(function (model) { return modelPicker.selected[model]; });
-        textarea.value = normalizeModels(retainedModels.concat(selectedModels)).join('\\n');
-        updateProviderModalDraftFromForm();
+        providerModal.models = normalizeProviderModelConfigs(retainedModels.concat(selectedModels.map(function (id) {
+          return currentById[id] || { id: id };
+        })));
         modelPicker = null;
         render();
       }
@@ -1717,6 +2188,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
           toast('error', '自定义 opencode npm 包名必填。');
           return;
         }
+        const modelError = validateProviderModelsClient(payload.models);
+        if (modelError) {
+          toast('error', modelError);
+          return;
+        }
         providerModal = null;
         modelPicker = null;
         modelFetchBusy = false;
@@ -1734,7 +2210,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           proxyMode: value('providerProxyMode'),
           customProxyUrl: value('providerProxyMode') === 'custom' ? value('providerCustomProxyUrl') : '',
           sslCheck: checked('providerSslCheck'),
-          models: parseModelText(value('providerModels')),
+          models: updateProviderModalModelsFromTable(),
           claudeBaseUrl: value('providerClaudeBaseUrl'),
           codexBaseUrl: value('providerCodexBaseUrl'),
           codexWireApi: value('providerCodexWireApi'),
@@ -1747,7 +2223,38 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return Boolean(document.getElementById('providerOpencodeCustomNpm'));
       }
 
-      function parseModelText(text) {
+      function validateProviderModelsClient(models) {
+        const seen = {};
+        for (let index = 0; index < models.length; index += 1) {
+          const model = models[index];
+          const id = String(model.id || '').trim();
+          if (!id) {
+            return '模型 ID 不能为空。';
+          }
+          if (seen[id]) {
+            return '模型 ID 不能重复：' + id;
+          }
+          seen[id] = true;
+          const contextWindow = model.contextWindow;
+          const compactPercent = model.compactThresholdPercent;
+          const maxOutput = model.maxOutputTokens;
+          if (contextWindow !== undefined && (!Number.isInteger(contextWindow) || contextWindow <= 0)) {
+            return id + ' 的上下文窗口必须是正整数。';
+          }
+          if (compactPercent !== undefined && (!Number.isInteger(compactPercent) || compactPercent < 1 || compactPercent > 99)) {
+            return id + ' 的压缩阈值必须是 1-99 的整数百分比。';
+          }
+          if (maxOutput !== undefined && (!Number.isInteger(maxOutput) || maxOutput <= 0)) {
+            return id + ' 的最大输出必须是正整数。';
+          }
+          if (contextWindow && maxOutput && maxOutput > contextWindow) {
+            return id + ' 的最大输出不能大于上下文窗口。';
+          }
+        }
+        return '';
+      }
+
+      function parseModelIds(text) {
         return normalizeModels(String(text || '').split(/[\\n,]+/).map(function (item) { return item.trim(); }).filter(Boolean));
       }
 
@@ -1768,6 +2275,33 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return dedupeModels(models).sort(function (left, right) {
           return left.localeCompare(right);
         });
+      }
+
+      function normalizeProviderModelConfigs(models) {
+        const byId = {};
+        (models || []).forEach(function (model) {
+          const id = String(model && model.id || '').trim();
+          if (id && !byId[id]) {
+            byId[id] = {
+              id: id,
+              contextWindow: optionalIntegerText(model.contextWindow),
+              compactThresholdPercent: optionalIntegerText(model.compactThresholdPercent),
+              maxOutputTokens: optionalIntegerText(model.maxOutputTokens)
+            };
+          }
+        });
+        return Object.keys(byId).sort(function (left, right) { return left.localeCompare(right); }).map(function (id) { return byId[id]; });
+      }
+
+      function optionalIntegerValue(id) {
+        return optionalIntegerText(value(id));
+      }
+
+      function optionalIntegerText(valueToParse) {
+        if (valueToParse === undefined || valueToParse === null || String(valueToParse).trim() === '') {
+          return undefined;
+        }
+        return Number(valueToParse);
       }
 
       function renderModelPickerMeta(total, selected, existing) {
@@ -1977,19 +2511,29 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (currentValue) {
           return currentValue;
         }
-        return provider && provider.models.length ? provider.models[0] : '';
+        return provider && provider.models.length ? provider.models[0].id : '';
       }
 
-      function renderClaudeChangePreview(agent, provider, selectedModels, disabled) {
+      function renderClaudeChangePreview(agent, provider, selectedModels, runtimeSettings, disabled) {
         if (!provider) {
           return '';
         }
+        const modelConfig = findProviderModelConfig(provider, selectedModels.ANTHROPIC_MODEL || firstConfiguredClaudeModel(selectedModels));
+        const limits = modelConfig ? calculateModelLimitsClient(modelConfig) : {};
         const rows = [
-          ['ANTHROPIC_BASE_URL', valueLabel(agent.baseUrl), valueLabel(provider.claudeBaseUrl)],
-          ['ANTHROPIC_AUTH_TOKEN', valueLabel(agent.authToken), valueLabel(provider.apiKey)]
+          managedPreviewRow(agent, 'env.ANTHROPIC_BASE_URL', agent.baseUrl, provider.claudeBaseUrl),
+          managedPreviewRow(agent, 'env.ANTHROPIC_AUTH_TOKEN', agent.authToken, provider.apiKey)
         ].concat(claudeKeys.map(function (key) {
-          return [key, valueLabel(agent.models[key]), valueLabel(selectedModels[key])];
-        }));
+          return managedPreviewRow(agent, 'env.' + key, agent.models[key], selectedModels[key]);
+        })).concat([
+          managedPreviewRow(agent, 'autoCompactWindow', agent.autoCompactWindow, limits.compactAtTokens),
+          managedPreviewRow(agent, 'env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', agent.runtimeSettings.autoCompactPctOverride, runtimeSettings.autoCompactPctOverride),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_ATTRIBUTION_HEADER', claudeModeValue(agent.runtimeSettings.attributionHeader, '1', '0'), claudeModeValue(runtimeSettings.attributionHeader, '1', '0')),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', claudeModeValue(agent.runtimeSettings.disableNonessentialTraffic, '1', '0'), claudeModeValue(runtimeSettings.disableNonessentialTraffic, '1', '0')),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', claudeModeValue(agent.runtimeSettings.experimentalAgentTeams, '1', '0'), claudeModeValue(runtimeSettings.experimentalAgentTeams, '1', '0')),
+          managedPreviewRow(agent, 'env.ENABLE_TOOL_SEARCH', claudeModeValue(agent.runtimeSettings.enableToolSearch, 'true', 'false'), claudeModeValue(runtimeSettings.enableToolSearch, 'true', 'false')),
+          managedPreviewRow(agent, 'sandbox.enabled', claudeModeValue(agent.runtimeSettings.sandbox, true, false), claudeModeValue(runtimeSettings.sandbox, true, false))
+        ]);
 
         return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-claude', disabled));
       }
@@ -2001,14 +2545,18 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const providerName = provider.name;
         const providerKey = 'model_providers.' + tomlPathKey(providerName);
         const hasCurrentBlock = agent.modelProvider === providerName;
+        const modelConfig = findProviderModelConfig(provider, selectedModel);
+        const limits = modelConfig ? calculateModelLimitsClient(modelConfig) : {};
         const rows = [
-          ['model_provider', valueLabel(agent.modelProvider), valueLabel(providerName)],
-          ['model', valueLabel(agent.model), valueLabel(selectedModel)],
-          [providerKey + '.name', hasCurrentBlock ? valueLabel(agent.providerName) : '未配置', valueLabel(provider.name)],
-          [providerKey + '.base_url', hasCurrentBlock ? valueLabel(agent.providerBaseUrl) : '未配置', valueLabel(provider.codexBaseUrl)],
-          [providerKey + '.wire_api', hasCurrentBlock ? valueLabel(agent.wireApi) : '未配置', valueLabel(provider.codexWireApi)],
-          [providerKey + '.requires_openai_auth', hasCurrentBlock ? booleanLabel(agent.requiresOpenAiAuth) : '未配置', booleanLabel(Boolean(provider.apiKey))],
-          ['auth.json.OPENAI_API_KEY', valueLabel(agent.openAiApiKey), valueLabel(provider.apiKey)]
+          managedPreviewRow(agent, 'model_provider', agent.modelProvider, providerName),
+          managedPreviewRow(agent, 'model', agent.model, selectedModel),
+          managedPreviewRow(agent, providerKey + '.name', hasCurrentBlock ? agent.providerName : undefined, provider.name),
+          managedPreviewRow(agent, providerKey + '.base_url', hasCurrentBlock ? agent.providerBaseUrl : undefined, provider.codexBaseUrl),
+          managedPreviewRow(agent, providerKey + '.wire_api', hasCurrentBlock ? agent.wireApi : undefined, provider.codexWireApi),
+          managedPreviewRow(agent, providerKey + '.requires_openai_auth', hasCurrentBlock ? agent.requiresOpenAiAuth : undefined, Boolean(provider.apiKey)),
+          managedPreviewRow(agent, 'model_context_window', agent.modelContextWindow, modelConfig && modelConfig.contextWindow),
+          managedPreviewRow(agent, 'model_auto_compact_token_limit', agent.modelAutoCompactTokenLimit, limits.compactAtTokens),
+          managedPreviewRow(agent.auth, 'OPENAI_API_KEY', agent.openAiApiKey, provider.apiKey, 'auth.json.OPENAI_API_KEY')
         ];
 
         return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-codex', disabled));
@@ -2022,14 +2570,20 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const hasCurrentBlock = agent.providerKey === provider.key;
         const currentModel = agent.providerKey && agent.model ? agent.providerKey + '/' + agent.model : agent.model;
         const nextModel = selectedModel ? provider.key + '/' + selectedModel : '';
-        const nextModelCount = !selectedModel ? provider.models.length : provider.models.indexOf(selectedModel) >= 0 ? provider.models.length : provider.models.length + 1;
+        const completeModels = provider.models.filter(function (model) { return Boolean(model.contextWindow && model.maxOutputTokens); });
+        const selectedConfig = findProviderModelConfig(provider, selectedModel);
+        const limits = selectedConfig ? calculateModelLimitsClient(selectedConfig) : {};
+        const nextModelCount = completeModels.length;
         const rows = [
-          ['model', valueLabel(currentModel), valueLabel(nextModel)],
-          [providerKey + '.npm', hasCurrentBlock ? valueLabel(agent.providerNpm) : '未配置', valueLabel(provider.opencodeNpm)],
-          [providerKey + '.name', hasCurrentBlock ? valueLabel(agent.providerName) : '未配置', valueLabel(provider.name)],
-          [providerKey + '.options.baseURL', hasCurrentBlock ? valueLabel(agent.providerBaseUrl) : '未配置', valueLabel(provider.opencodeBaseUrl)],
-          [providerKey + '.options.apiKey', hasCurrentBlock ? valueLabel(agent.providerApiKey) : '未配置', valueLabel(provider.apiKey)],
-          [providerKey + '.models', hasCurrentBlock ? countLabel(agent.providerModelCount) : '未配置', countLabel(nextModelCount)]
+          managedPreviewRow(agent, 'model', currentModel, nextModel),
+          managedPreviewRow(agent, providerKey + '.npm', hasCurrentBlock ? agent.providerNpm : undefined, provider.opencodeNpm),
+          managedPreviewRow(agent, providerKey + '.name', hasCurrentBlock ? agent.providerName : undefined, provider.name),
+          managedPreviewRow(agent, providerKey + '.options.baseURL', hasCurrentBlock ? agent.providerBaseUrl : undefined, provider.opencodeBaseUrl),
+          managedPreviewRow(agent, providerKey + '.options.apiKey', hasCurrentBlock ? agent.providerApiKey : undefined, provider.apiKey),
+          ['provider.' + provider.key + '.models', countLabel(agent.providerModelCount), countLabel(nextModelCount), agent.providerModelCount === nextModelCount ? '保持不变' : '写入'],
+          managedPreviewRow(agent, 'compaction.reserved', agent.compactionReserved, limits.reserved),
+          ['当前模型 limit.context', valueLabel(agent.modelContextWindow), valueLabel(selectedConfig && selectedConfig.contextWindow), agent.modelContextWindow === (selectedConfig && selectedConfig.contextWindow) ? '保持不变' : '写入'],
+          ['当前模型 limit.output', valueLabel(agent.maxOutputTokens), valueLabel(selectedConfig && selectedConfig.maxOutputTokens), agent.maxOutputTokens === (selectedConfig && selectedConfig.maxOutputTokens) ? '保持不变' : '写入']
         ];
 
         return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-opencode', disabled));
@@ -2045,6 +2599,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
             const key = row[0];
             const before = row[1];
             const after = row[2];
+            const status = row[3] || (before === after ? '保持不变' : '写入');
             return '<div class="change-row ' + (before === after ? '' : 'changed') + '">' +
               '<code class="change-key">' + h(key) + '</code>' +
               '<div class="change-values">' +
@@ -2052,6 +2607,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 '<span class="change-arrow" aria-hidden="true">&rarr;</span>' +
                 '<span class="change-value change-next" title="保存后">' + h(after) + '</span>' +
               '</div>' +
+              '<span class="change-status ' + (status === '写入' ? 'write' : status === '删除' ? 'delete' : '') + '">' + h(status) + '</span>' +
             '</div>';
           }).join('') + '</div>' +
         '</div>';
@@ -2062,8 +2618,50 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function valueLabel(value) {
-        const text = String(value || '').trim();
+        const text = value === false || value === 0 ? String(value) : String(value || '').trim();
         return text ? text : '未配置';
+      }
+
+      function managedPreviewRow(agent, path, currentValue, desiredValue, displayKey) {
+        const current = valueLabel(currentValue);
+        const hasDesired = desiredValue !== undefined && desiredValue !== null && desiredValue !== '';
+        if (hasDesired) {
+          const next = valueLabel(desiredValue);
+          return [displayKey || path, current, next, current === next ? '保持不变' : '写入'];
+        }
+        const managed = Boolean(agent && agent.managedPaths && agent.managedPaths.indexOf(path) >= 0);
+        return [displayKey || path, current, managed ? '未配置' : current, managed && current !== '未配置' ? '删除' : '保持不变'];
+      }
+
+      function claudeModeValue(mode, enabledValue, disabledValue) {
+        return mode === 'enabled' ? enabledValue : mode === 'disabled' ? disabledValue : undefined;
+      }
+
+      function firstConfiguredClaudeModel(models) {
+        for (let index = 0; index < claudeKeys.length; index += 1) {
+          if (models[claudeKeys[index]]) {
+            return models[claudeKeys[index]];
+          }
+        }
+        return '';
+      }
+
+      function findProviderModelConfig(provider, modelId) {
+        if (!provider || !modelId) {
+          return null;
+        }
+        const baseId = String(modelId).replace(/\\[1m\\]$/i, '');
+        return provider.models.find(function (model) { return String(model.id).replace(/\\[1m\\]$/i, '') === baseId; })
+          || provider.models.find(function (model) { return String(model.id).replace(/\\[1m\\]$/i, '').toLocaleLowerCase() === baseId.toLocaleLowerCase(); })
+          || null;
+      }
+
+      function calculateModelLimitsClient(model) {
+        if (!model || !model.contextWindow || model.compactThresholdPercent === undefined) {
+          return {};
+        }
+        const compactAtTokens = Math.floor(model.contextWindow * model.compactThresholdPercent / 100);
+        return { compactAtTokens: compactAtTokens, reserved: model.contextWindow - compactAtTokens };
       }
 
       function booleanLabel(value) {
@@ -2110,7 +2708,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function modelSelect(id, provider, current, disabled, allowUnset) {
-        const models = provider ? provider.models.slice() : [];
+        const baseModels = provider ? provider.models.map(function (model) { return model.id; }) : [];
+        const models = allowUnset ? Array.from(new Set(baseModels.reduce(function (result, model) {
+          const base = String(model).replace(/\\[1m\\]$/i, '');
+          result.push(base, base + '[1m]');
+          return result;
+        }, []))) : baseModels;
         const options = [];
         const currentValue = current || '';
         if (allowUnset) {
@@ -2120,7 +2723,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           options.push([currentValue, '当前：' + currentValue + '（不在 Provider 模型列表）']);
         }
         models.forEach(function (model) {
-          options.push([model, model]);
+          options.push([model, model.replace(/\\[1m\\]$/i, ' [1M]')]);
         });
         if (!options.length) {
           options.push(['', '未配置']);
@@ -2137,7 +2740,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (selectedId && currentProviderId && selectedId === currentProviderId) {
           return current;
         }
-        return provider.models.indexOf(current) >= 0 ? current : '';
+        const baseCurrent = String(current).replace(/\\[1m\\]$/i, '');
+        return provider.models.some(function (model) { return String(model.id).replace(/\\[1m\\]$/i, '') === baseCurrent; }) ? current : '';
       }
 
       function providersFor(agent) {
@@ -2147,11 +2751,32 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       function saveClaude() {
         const providerId = value('claudeProviderSelect');
+        const pctText = value('claudeAutoCompactPctOverride').trim();
+        const pctValue = pctText ? Number(pctText) : undefined;
+        if (pctValue !== undefined && (!Number.isInteger(pctValue) || pctValue < 1 || pctValue > 99)) {
+          toast('error', 'Claude 自动压缩比例覆盖必须是 1-99 的整数百分比。');
+          return;
+        }
         const models = {};
         claudeKeys.forEach(function (key) {
           models[key] = value('claudeModel_' + key);
         });
-        post('saveClaude', { providerId: providerId, models: models });
+        post('saveClaude', {
+          providerId: providerId,
+          models: models,
+          runtimeSettings: collectClaudeRuntimeSettings()
+        });
+      }
+
+      function collectClaudeRuntimeSettings() {
+        return {
+          autoCompactPctOverride: optionalIntegerValue('claudeAutoCompactPctOverride'),
+          attributionHeader: value('claudeAttributionHeader') || 'unset',
+          disableNonessentialTraffic: value('claudeDisableNonessentialTraffic') || 'unset',
+          experimentalAgentTeams: value('claudeExperimentalAgentTeams') || 'unset',
+          enableToolSearch: value('claudeEnableToolSearch') || 'unset',
+          sandbox: value('claudeSandbox') || 'unset'
+        };
       }
 
       function saveCodex() {
@@ -2195,7 +2820,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
           proxyMode: provider.proxyMode,
           customProxyUrl: provider.customProxyUrl,
           sslCheck: provider.sslCheck,
-          models: provider.models.slice(),
+          models: provider.models.map(function (model) {
+            return {
+              id: model.id,
+              contextWindow: model.contextWindow,
+              compactThresholdPercent: model.compactThresholdPercent,
+              maxOutputTokens: model.maxOutputTokens
+            };
+          }),
           claudeBaseUrl: provider.claudeBaseUrl,
           codexBaseUrl: provider.codexBaseUrl,
           codexWireApi: provider.codexWireApi,
@@ -2218,7 +2850,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return '<span class="muted">未配置</span>';
         }
         const visibleModels = models.slice(0, 4).map(function (model) {
-          return '<span class="model-id" title="' + attr(model) + '">' + h(model) + '</span>';
+          const details = model.contextWindow ? ' · ' + formatInteger(model.contextWindow) + ' ctx' : '';
+          return '<span class="model-id" title="' + attr(model.id + details) + '">' + h(model.id) + '</span>';
         }).join('');
         const more = models.length > 4 ? '<span class="model-more" title="共 ' + h(String(models.length)) + ' 个模型">...</span>' : '';
         return '<div class="model-id-list">' + visibleModels + more + '</div>';

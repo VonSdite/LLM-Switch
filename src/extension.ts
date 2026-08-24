@@ -10,9 +10,10 @@ import {
   saveOpencodeConfig
 } from './agentConfigs';
 import { ConfigPathTarget, resetAgentConfigPath, setAgentConfigPath } from './configPaths';
+import { claudeModelVariants, getModelParameterSuggestions } from './modelPresets';
 import { deleteProvider, loadProviders, reorderProviders, upsertProvider } from './providerStore';
 import { getManagerHtml } from './webview';
-import { AgentName, CLAUDE_MODEL_KEYS, ClaudeAgentState, CodexAgentState, OpencodeAgentState, ProviderConfig, WebviewState } from './types';
+import { AgentName, CLAUDE_MODEL_KEYS, ClaudeAgentState, CodexAgentState, OpencodeAgentState, ProviderConfig, ProviderModelConfig, WebviewState } from './types';
 
 interface WebviewMessage {
   type: string;
@@ -185,6 +186,16 @@ class LlmSwitchManager {
           await webview.postMessage({ type: 'providerModelsFetched', ...result });
           return;
         }
+        case 'suggestModelParameters': {
+          const requestId = stringField(message.payload, 'requestId');
+          const modelId = stringField(message.payload, 'modelId');
+          await webview.postMessage({
+            type: 'modelParameterSuggestions',
+            requestId,
+            suggestions: getModelParameterSuggestions(modelId)
+          });
+          return;
+        }
         default:
           return;
       }
@@ -284,7 +295,11 @@ async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: Ag
 
   if (agent === 'claude') {
     const models = Object.fromEntries(CLAUDE_MODEL_KEYS.map((key) => [key, selected.model])) as Record<typeof CLAUDE_MODEL_KEYS[number], string>;
-    await saveClaudeConfig(context, providers, { providerId: selected.providerId, models });
+    await saveClaudeConfig(context, providers, {
+      providerId: selected.providerId,
+      models,
+      runtimeSettings: agents.claude.runtimeSettings
+    });
     return true;
   }
   if (agent === 'codex') {
@@ -298,15 +313,24 @@ async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: Ag
 function modelQuickPickItems(agent: AgentName, providers: ProviderConfig[], agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState): ModelQuickPickItem[] {
   return providers
     .filter((provider) => providerSupportsAgent(provider, agent) && provider.models.length > 0)
-    .flatMap((provider) => provider.models.map((model) => modelQuickPickItem(agent, provider, model, agentState)));
+    .flatMap((provider) => provider.models.flatMap((model) => {
+      const modelIds = agent === 'claude' ? claudeModelVariants(model.id) : [model.id];
+      return modelIds.map((modelId) => modelQuickPickItem(agent, provider, model, modelId, agentState));
+    }));
 }
 
-function modelQuickPickItem(agent: AgentName, provider: ProviderConfig, model: string, agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState): ModelQuickPickItem {
+function modelQuickPickItem(agent: AgentName, provider: ProviderConfig, modelConfig: ProviderModelConfig, model: string, agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState): ModelQuickPickItem {
   const isCurrent = isCurrentAgentModel(agent, agentState, provider.id, model);
+  const parameterParts = [
+    modelConfig.contextWindow ? `上下文 ${modelConfig.contextWindow.toLocaleString()}` : '',
+    modelConfig.compactThresholdPercent !== undefined ? `压缩 ${modelConfig.compactThresholdPercent}%` : '',
+    modelConfig.maxOutputTokens ? `输出 ${modelConfig.maxOutputTokens.toLocaleString()}` : ''
+  ].filter(Boolean);
+  const parameterSummary = parameterParts.length ? parameterParts.join('，') : '模型参数未配置';
   return {
-    label: `${provider.name} / ${model}`,
+    label: `${provider.name} / ${model.replace(/\[1m\]$/i, ' [1M]')}`,
     description: isCurrent ? '当前' : undefined,
-    detail: `${agentDisplayName(agent)} API: ${providerApiUrl(provider, agent)}`,
+    detail: `${parameterSummary} · ${agentDisplayName(agent)} API: ${providerApiUrl(provider, agent)}`,
     providerId: provider.id,
     model
   };

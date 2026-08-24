@@ -2,8 +2,10 @@
 .gitignore
 .vscode/**
 .vscode-test/**
+.codegraph/**
 src/**
 node_modules/**/.cache/**
 **/*.map
+dist/*.test.js
 tsconfig.json
 *.vsix

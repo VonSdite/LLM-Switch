@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 import { readStorageState, writeStorageState } from './storageFiles';
+import { modelsNeedMigration, normalizeProviderModels } from './providerModels';
 import { CodexWireApi, ProviderConfig, ProxyMode } from './types';
+
+export { findProviderModel, mergeFetchedModels, normalizeProviderModels } from './providerModels';
 
 const LEGACY_PROVIDERS_KEY = 'providers';
 const PROVIDERS_STATE_NAME = 'providers';
@@ -17,7 +20,7 @@ interface ProviderInput {
   proxyMode?: ProxyMode;
   customProxyUrl?: string;
   sslCheck?: boolean;
-  models?: string[] | string;
+  models?: unknown;
   claudeBaseUrl?: string;
   codexBaseUrl?: string;
   codexWireApi?: CodexWireApi;
@@ -47,10 +50,9 @@ export async function loadProviders(context: vscode.ExtensionContext): Promise<P
     const id = storedId || randomUUID();
     const storedKey = stringValue(raw.key);
     const key = storedKey || uniqueProviderKey(name, providers);
-    const hasInlineApiKey = Object.prototype.hasOwnProperty.call(raw, 'apiKey');
     const inlineApiKey = stringValue(raw.apiKey);
     const apiKey = inlineApiKey || await readLegacyProviderApiKey(context, id);
-    if (!storedId || !storedKey || hasInlineApiKey) {
+    if (!storedId || !storedKey || modelsNeedMigration(raw.models)) {
       needsMigration = true;
     }
     providers.push({
@@ -61,7 +63,7 @@ export async function loadProviders(context: vscode.ExtensionContext): Promise<P
       proxyMode: normalizeProxyMode(raw.proxyMode),
       customProxyUrl: stringValue(raw.customProxyUrl),
       sslCheck: typeof raw.sslCheck === 'boolean' ? raw.sslCheck : false,
-      models: normalizeModels(raw.models),
+      models: normalizeProviderModels(raw.models),
       claudeBaseUrl: stringValue(raw.claudeBaseUrl),
       codexBaseUrl: stringValue(raw.codexBaseUrl),
       codexWireApi: normalizeWireApi(raw.codexWireApi),
@@ -109,7 +111,7 @@ export async function upsertProvider(context: vscode.ExtensionContext, input: Pr
     proxyMode,
     customProxyUrl: proxyMode === 'custom' ? customProxyUrl : '',
     sslCheck: typeof input.sslCheck === 'boolean' ? input.sslCheck : false,
-    models: normalizeModels(input.models),
+    models: normalizeProviderModels(input.models, true),
     claudeBaseUrl: stringValue(input.claudeBaseUrl).trim(),
     codexBaseUrl: stringValue(input.codexBaseUrl).trim(),
     codexWireApi: normalizeWireApi(input.codexWireApi),
@@ -173,6 +175,7 @@ export function findProvider(providers: ProviderConfig[], providerId: string, ag
   return provider;
 }
 
+
 function uniqueProviderKey(name: string, providers: ProviderConfig[]): string {
   const base = slugProviderKey(name);
   const used = new Set(providers.map((provider) => provider.key));
@@ -203,15 +206,6 @@ function isValidProviderName(name: string): boolean {
   return PROVIDER_NAME_PATTERN.test(name);
 }
 
-function normalizeModels(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return dedupe(value.map((item) => stringValue(item).trim()).filter(Boolean));
-  }
-  if (typeof value === 'string') {
-    return dedupe(value.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean));
-  }
-  return [];
-}
 
 function normalizeProxyMode(value: unknown): ProxyMode {
   if (value === 'direct' || value === 'system' || value === 'custom') {
@@ -243,8 +237,4 @@ async function readLegacyProviderApiKey(context: vscode.ExtensionContext, provid
 
 async function deleteLegacyProviderApiKeys(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<void> {
   await Promise.all(providers.map((provider) => context.secrets.delete(legacyProviderApiKeySecretKey(provider.id))));
-}
-
-function dedupe(values: string[]): string[] {
-  return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
 }
