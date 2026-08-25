@@ -1815,9 +1815,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (contextWindow > 0 && maxOutput > contextWindow) {
           return '最大输出不能大于上下文窗口。';
         }
-        if (contextWindow > 0 && percent !== undefined && maxOutput > contextWindow * (1 - Number(percent) / 100)) {
-          return '压缩阈值预留空间小于最大输出；可以保存，但客户端可能更早压缩。';
-        }
         return '';
       }
 

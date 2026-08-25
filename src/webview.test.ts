@@ -114,6 +114,27 @@ test('保存 Provider 时忽略空模型 ID 行', () => {
   )), false);
 });
 
+test('Provider 模型输出大于压缩预留空间时不显示提示', () => {
+  const provider = {
+    ...providerFixture(),
+    models: [{
+      id: 'gpt-5.5',
+      contextWindow: 372_000,
+      compactThresholdPercent: 85,
+      maxOutputTokens: 128_000
+    }]
+  };
+  const harness = createHarness({ activeTab: 'providers', activeAgentTab: 'claude' });
+  harness.sendState({
+    providers: [provider],
+    agents: {}
+  });
+  harness.click('provider-edit', { 'data-provider-id': 'provider-1' });
+
+  assert.doesNotMatch(harness.app.innerHTML, /压缩阈值预留空间小于最大输出/);
+  assert.doesNotMatch(harness.app.innerHTML, /has-warning/);
+});
+
 test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
   const harness = createHarness({ activeTab: 'agents', activeAgentTab: 'claude' });
   harness.sendState({
