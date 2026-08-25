@@ -7,8 +7,10 @@ interface FakeElement {
 }
 
 interface WebviewHarness {
+  html: string;
   app: FakeElement;
   messages: unknown[];
+  sendMessage(message: unknown): void;
   sendState(state: unknown): void;
   click(action: string, attributes?: Record<string, string>): void;
 }
@@ -26,7 +28,34 @@ test('Webview 脚本可解析并渲染 Provider 模型参数台账', () => {
   assert.match(harness.app.innerHTML, /压缩阈值 %/);
   assert.match(harness.app.innerHTML, /最大输出/);
   assert.match(harness.app.innerHTML, /1048576/);
-  assert.ok(harness.messages.some((message) => isMessageType(message, 'suggestModelParameters')));
+  assert.match(harness.app.innerHTML, /data-model-candidate-menu="contextWindow"/);
+  assert.match(harness.app.innerHTML, /data-model-candidate-menu="compactThresholdPercent"/);
+  assert.match(harness.app.innerHTML, /data-model-candidate-menu="maxOutputTokens"/);
+  assert.doesNotMatch(harness.app.innerHTML, /model-suggestion-strip/);
+
+  const request = harness.messages.find((message): message is { type: string; payload: { requestId: string } } => (
+    isMessageType(message, 'suggestModelParameters')
+      && typeof (message as { payload?: { requestId?: unknown } }).payload?.requestId === 'string'
+  ));
+  assert.ok(request);
+  harness.sendMessage({
+    type: 'modelParameterSuggestions',
+    requestId: request.payload.requestId,
+    suggestions: {
+      sourceLabel: '测试模型参数来源',
+      contextWindow: [{ value: 777_777, label: '测试上下文候选' }],
+      compactThresholdPercent: [{ value: 80, label: '测试压缩候选' }],
+      maxOutputTokens: [{ value: 66_666, label: '测试输出候选' }]
+    }
+  });
+  harness.click('provider-model-batch-toggle');
+
+  assert.match(harness.app.innerHTML, /777,777/);
+  assert.match(harness.app.innerHTML, /model-candidate-option/);
+  assert.doesNotMatch(harness.app.innerHTML, /测试模型参数来源/);
+  assert.doesNotMatch(harness.app.innerHTML, /测试上下文候选/);
+  assert.match(harness.app.innerHTML, /class="modal provider-modal"/);
+  assert.match(harness.html, /\.provider-modal\s*\{[^}]*width: 820px;[^}]*resize: both;/);
 });
 
 test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
@@ -67,6 +96,95 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
   assert.match(harness.app.innerHTML, /CLAUDE_AUTOCOMPACT_PCT_OVERRIDE/);
   assert.match(harness.app.innerHTML, /autoCompactWindow/);
   assert.match(harness.app.innerHTML, /838860/);
+  assert.match(harness.app.innerHTML, /class="help-icon" data-action="help-toggle"/);
+  assert.match(harness.app.innerHTML, /data-help-popover="1" role="tooltip" hidden/);
+  assert.doesNotMatch(harness.app.innerHTML, /class="help-icon" title=/);
+  assert.match(harness.app.innerHTML, /id="claudeAutoCompactPctOverride"[^>]*value=""/);
+  assert.match(harness.app.innerHTML, /<span>非必要流量<\/span>/);
+  assert.doesNotMatch(harness.app.innerHTML, /<span>禁用非必要流量<\/span>/);
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeAttributionHeader'), 'unset');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeDisableNonessentialTraffic'), 'unset');
+  assert.deepEqual(optionLabelsByValue(harness.app.innerHTML, 'claudeDisableNonessentialTraffic'), {
+    unset: '不设置',
+    disabled: '允许',
+    enabled: '禁用'
+  });
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeExperimentalAgentTeams'), 'unset');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeEnableToolSearch'), 'unset');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeSandbox'), 'unset');
+  assert.match(harness.app.innerHTML, /沙箱环境/);
+  assert.match(harness.app.innerHTML, /env\.IS_SANDBOX/);
+  assert.doesNotMatch(harness.app.innerHTML, /sandbox\.enabled/);
+});
+
+test('Codex 页面支持 service tier、沙箱和审批策略', () => {
+  const harness = createHarness({ activeTab: 'agents', activeAgentTab: 'codex' });
+  harness.sendState({
+    providers: [providerFixture()],
+    agents: {
+      claude: {},
+      codex: codexAgentFixture({}),
+      opencode: {}
+    }
+  });
+
+  assert.match(harness.app.innerHTML, /Service tier/);
+  assert.match(harness.app.innerHTML, /Sandbox mode/);
+  assert.match(harness.app.innerHTML, /Approval policy/);
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexServiceTier'), '');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexSandboxMode'), '');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexApprovalPolicy'), '');
+
+  harness.sendState({
+    providers: [providerFixture()],
+    agents: {
+      claude: {},
+      codex: codexAgentFixture({
+        serviceTier: 'priority',
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'on-request'
+      }),
+      opencode: {}
+    }
+  });
+
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexServiceTier'), 'priority');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexSandboxMode'), 'workspace-write');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexApprovalPolicy'), 'on-request');
+  assert.match(harness.app.innerHTML, /service_tier/);
+  assert.match(harness.app.innerHTML, /auto：使用项目配置的服务档位/);
+  assert.match(harness.app.innerHTML, /default：标准处理档位/);
+  assert.match(harness.app.innerHTML, /flex：弹性处理/);
+  assert.match(harness.app.innerHTML, /priority：优先处理（Fast）/);
+  assert.match(harness.app.innerHTML, /实际可用档位取决于模型和上游 Provider/);
+  assert.match(harness.app.innerHTML, /sandbox_mode/);
+  assert.match(harness.app.innerHTML, /approval_policy/);
+});
+
+test('opencode 模型参数留空时仍可保存', () => {
+  const harness = createHarness({ activeTab: 'agents', activeAgentTab: 'opencode' });
+  const provider = {
+    ...providerFixture(),
+    models: [{ id: 'private-model' }]
+  };
+  harness.sendState({
+    providers: [provider],
+    agents: {
+      claude: {},
+      codex: {},
+      opencode: {
+        ...configPathFixture('/tmp/opencode.json'),
+        selectedProviderId: 'provider-1',
+        providerKey: 'provider-one',
+        model: 'private-model',
+        providerModelCount: 0,
+        managedPaths: []
+      }
+    }
+  });
+
+  assert.doesNotMatch(harness.app.innerHTML, /需要同时配置上下文窗口和最大输出/);
+  assert.match(harness.app.innerHTML, /<button data-action="save-opencode" >保存<\/button>/);
 });
 
 function createHarness(restoredState: Record<string, unknown>): WebviewHarness {
@@ -112,8 +230,14 @@ function createHarness(restoredState: Record<string, unknown>): WebviewHarness {
   execute(acquire, fakeWindow, fakeDocument, immediateTimeout);
 
   return {
+    html,
     app,
     messages,
+    sendMessage(message: unknown): void {
+      for (const listener of windowListeners.message || []) {
+        listener({ data: message });
+      }
+    },
     sendState(state: unknown): void {
       for (const listener of windowListeners.message || []) {
         listener({ data: { type: 'state', state } });
@@ -170,6 +294,46 @@ function configPathFixture(filePath: string): Record<string, unknown> {
   };
 }
 
+function codexAgentFixture(runtimeSettings: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...configPathFixture('/tmp/codex.toml'),
+    selectedProviderId: 'provider-1',
+    modelProvider: 'provider-one',
+    providerName: 'provider-one',
+    providerBaseUrl: 'https://codex.example/v1',
+    wireApi: 'responses',
+    requiresOpenAiAuth: true,
+    auth: {
+      ...configPathFixture('/tmp/auth.json'),
+      managedPaths: []
+    },
+    openAiApiKey: 'token',
+    hasOpenAiApiKey: true,
+    model: 'glm-5.3',
+    modelContextWindow: 1_048_576,
+    modelAutoCompactTokenLimit: 838_860,
+    runtimeSettings,
+    managedPaths: []
+  };
+}
+
 function isMessageType(message: unknown, type: string): boolean {
   return Boolean(message && typeof message === 'object' && 'type' in message && (message as { type?: unknown }).type === type);
+}
+
+function selectedOptionValue(html: string, selectId: string): string {
+  const select = html.match(new RegExp(`<select[^>]*id="${selectId}"[^>]*>([\\s\\S]*?)<\\/select>`));
+  assert.ok(select, `应渲染 ${selectId}`);
+  const option = select[1].match(/<option value="([^"]*)"[^>]*selected/);
+  assert.ok(option, `${selectId} 应有选中项`);
+  return option[1];
+}
+
+function optionLabelsByValue(html: string, selectId: string): Record<string, string> {
+  const select = html.match(new RegExp(`<select[^>]*id="${selectId}"[^>]*>([\\s\\S]*?)<\\/select>`));
+  assert.ok(select, `应渲染 ${selectId}`);
+  return Object.fromEntries(Array.from(
+    select[1].matchAll(/<option value="([^"]*)"[^>]*>([^<]*)<\/option>/g),
+    (option) => [option[1], option[2]]
+  ));
 }

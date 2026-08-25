@@ -110,23 +110,65 @@ export function getManagerHtml(webview: vscode.Webview): string {
       gap: 6px;
       min-width: 0;
     }
+    .help-control {
+      position: relative;
+      display: inline-flex;
+      flex: 0 0 auto;
+    }
     .help-icon {
       width: 16px;
       height: 16px;
+      min-height: 16px;
+      padding: 0;
       display: inline-grid;
       place-items: center;
       border: 1px solid var(--vscode-descriptionForeground);
       border-radius: 50%;
+      background: transparent;
       color: var(--vscode-descriptionForeground);
       font-size: 11px;
       line-height: 1;
-      cursor: help;
+      cursor: pointer;
       user-select: none;
     }
-    .help-icon:hover {
+    .help-icon:hover,
+    .help-icon:focus-visible,
+    .help-icon[aria-expanded="true"] {
+      outline: none;
       color: var(--vscode-foreground);
-      border-color: var(--vscode-foreground);
+      border-color: var(--vscode-focusBorder);
       background: var(--vscode-toolbar-hoverBackground);
+    }
+    .help-popover {
+      position: absolute;
+      z-index: 40;
+      top: calc(100% + 7px);
+      left: -7px;
+      width: max-content;
+      max-width: min(320px, calc(100vw - 48px));
+      padding: 8px 10px;
+      border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      border-radius: 5px;
+      background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+      color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.5;
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+    .help-popover::before {
+      content: "";
+      position: absolute;
+      top: -5px;
+      left: 10px;
+      width: 8px;
+      height: 8px;
+      border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      border-left: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      background: inherit;
+      transform: rotate(45deg);
     }
     .input-with-action {
       position: relative;
@@ -536,7 +578,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
     .model-ledger-head,
     .model-ledger-main {
       display: grid;
-      grid-template-columns: minmax(220px, 1.8fr) minmax(130px, 0.8fr) minmax(118px, 0.65fr) minmax(130px, 0.8fr) 34px;
+      grid-template-columns: minmax(180px, 1fr) 124px 124px 124px 34px;
       gap: 7px;
       align-items: center;
     }
@@ -562,32 +604,54 @@ export function getManagerHtml(webview: vscode.Webview): string {
       min-height: 30px;
       padding: 0;
     }
-    .model-suggestion-strip {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 5px;
+    .model-parameter-control {
+      position: relative;
       min-width: 0;
+    }
+    .model-parameter-control > input {
+      width: 100%;
+    }
+    .model-candidate-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      z-index: 8;
+      width: 100%;
+      min-width: max-content;
+      max-width: min(240px, calc(100vw - 64px));
+      max-height: 240px;
+      overflow: auto;
+      padding: 5px;
+      border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      border-radius: 5px;
+      background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+      color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    }
+    .model-candidate-empty {
       padding: 5px 7px;
-      border-left: 2px solid var(--vscode-focusBorder);
-      background: var(--vscode-textCodeBlock-background, transparent);
       color: var(--vscode-descriptionForeground);
       font-size: 11px;
     }
-    .model-suggestion-source {
-      margin-right: 3px;
-      color: var(--vscode-foreground);
-    }
-    .candidate-button {
-      min-height: 23px;
-      padding: 2px 6px;
-      border-color: var(--vscode-panel-border);
+    .model-candidate-option {
+      width: 100%;
+      min-height: 30px;
+      display: block;
+      padding: 5px 7px;
+      border: 0;
       background: transparent;
-      color: var(--vscode-foreground);
-      font-size: 11px;
+      color: inherit;
+      text-align: left;
     }
-    .candidate-button:hover {
-      background: var(--vscode-toolbar-hoverBackground);
+    .model-candidate-option:hover,
+    .model-candidate-option:focus-visible {
+      outline: none;
+      background: var(--vscode-list-hoverBackground);
+    }
+    .model-candidate-value {
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-weight: 650;
+      white-space: nowrap;
     }
     .model-warning {
       color: var(--vscode-inputValidation-warningForeground);
@@ -881,6 +945,13 @@ export function getManagerHtml(webview: vscode.Webview): string {
       box-shadow: 0 12px 38px rgba(0, 0, 0, 0.35);
       overflow: hidden;
     }
+    .provider-modal {
+      width: 820px;
+      min-width: 680px;
+      max-width: calc(100vw - 48px);
+      max-height: calc(100vh - 48px);
+      resize: both;
+    }
     .modal-head,
     .modal-foot {
       display: flex;
@@ -1018,6 +1089,13 @@ export function getManagerHtml(webview: vscode.Webview): string {
       .modal-backdrop {
         padding: 10px;
       }
+      .provider-modal {
+        width: 100%;
+        min-width: 0;
+        max-width: calc(100vw - 20px);
+        max-height: calc(100vh - 20px);
+        resize: vertical;
+      }
       .row-actions {
         justify-content: flex-start;
       }
@@ -1065,6 +1143,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         claudeRuntimeSettings: null,
         codexProviderId: null,
         codexModel: null,
+        codexRuntimeSettings: null,
         opencodeProviderId: null,
         opencodeModel: null
       };
@@ -1080,6 +1159,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       let suggestionRequestSerial = 0;
       let suggestionRequests = {};
       let modelSuggestionDebounce = null;
+      let helpIdSerial = 0;
 
       window.addEventListener('message', function (event) {
         const message = event.data;
@@ -1111,6 +1191,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
       });
 
       document.addEventListener('click', function (event) {
+        if (!event.target.closest('[data-help-control]')) {
+          closeHelpPopovers();
+        }
+        const parameterInput = event.target.closest('[data-provider-model-field]');
+        if (parameterInput && parameterInput.dataset.providerModelField !== 'id') {
+          openModelCandidateMenu(parameterInput);
+        } else if (!event.target.closest('[data-model-parameter-control]')) {
+          closeModelCandidateMenus();
+        }
         const button = event.target.closest('[data-action]');
         if (!button) {
           if (searchSelectState && !event.target.closest('[data-search-select-root]')) {
@@ -1120,6 +1209,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return;
         }
         const action = button.getAttribute('data-action');
+        if (action === 'help-toggle') {
+          event.preventDefault();
+          toggleHelpPopover(button);
+          return;
+        }
         if (action === 'search-select-open') {
           const selectId = button.getAttribute('data-select-id') || '';
           searchSelectState = searchSelectState && searchSelectState.id === selectId ? null : { id: selectId, query: '' };
@@ -1192,9 +1286,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (action === 'model-candidate-apply') {
           applyModelCandidate(button);
-        }
-        if (action === 'model-candidate-fill') {
-          fillModelCandidate(button);
+          return;
         }
         if (action === 'provider-api-key-toggle') {
           toggleProviderApiKey(button);
@@ -1240,6 +1332,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (action === 'save-opencode') {
           saveOpencode();
+        }
+      });
+
+      document.addEventListener('focusin', function (event) {
+        const target = event.target;
+        const control = target && target.closest ? target.closest('[data-model-parameter-control]') : null;
+        closeModelCandidateMenus(control);
+        if (target && target.dataset && target.dataset.providerModelField && target.dataset.providerModelField !== 'id') {
+          openModelCandidateMenu(target);
         }
       });
 
@@ -1296,6 +1397,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
           drafts.codexModel = target.value;
           render();
         }
+        if (target.dataset && target.dataset.codexRuntimeSetting) {
+          drafts.codexRuntimeSettings = collectCodexRuntimeSettings();
+          render();
+        }
         if (target.id === 'opencodeProviderSelect') {
           drafts.opencodeProviderId = target.value;
           drafts.opencodeModel = null;
@@ -1349,10 +1454,41 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (target && target.dataset && target.dataset.configPathTarget) {
           saveAgentConfigPath(target.dataset.configPathTarget);
         }
+        const control = target && target.closest ? target.closest('[data-model-parameter-control]') : null;
+        if (control && (!event.relatedTarget || !control.contains(event.relatedTarget))) {
+          setTimeout(function () {
+            if (!control.contains(document.activeElement)) {
+              closeModelCandidateControl(control);
+            }
+          }, 0);
+        }
+        const helpControl = target && target.closest ? target.closest('[data-help-control]') : null;
+        if (helpControl && (!event.relatedTarget || !helpControl.contains(event.relatedTarget))) {
+          setTimeout(function () {
+            if (!helpControl.contains(document.activeElement)) {
+              closeHelpControl(helpControl);
+            }
+          }, 0);
+        }
       });
 
       document.addEventListener('keydown', function (event) {
         const target = event.target;
+        if (event.key === 'Escape' && document.querySelector('[data-help-popover]:not([hidden])')) {
+          event.preventDefault();
+          closeHelpPopovers();
+          return;
+        }
+        if (event.key === 'Escape' && document.querySelector('[data-model-candidate-menu]:not([hidden])')) {
+          event.preventDefault();
+          const control = target && target.closest ? target.closest('[data-model-parameter-control]') : null;
+          const input = control && control.querySelector('[data-provider-model-field]');
+          if (input && typeof input.focus === 'function') {
+            input.focus();
+          }
+          closeModelCandidateMenus();
+          return;
+        }
         if (target && target.dataset && target.dataset.searchSelectQuery) {
           if (event.key === 'Enter') {
             event.preventDefault();
@@ -1529,7 +1665,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const selected = providerModal;
         const selectedOpencodeNpm = selected.opencodeNpm === undefined || selected.opencodeNpm === null ? defaultOpencodeNpm : selected.opencodeNpm;
         return '<div class="modal-backdrop" role="presentation">' +
-          '<section class="modal" role="dialog" aria-modal="true" aria-label="' + h(selected.id ? '编辑 Provider' : '新增 Provider') + '">' +
+          '<section class="modal provider-modal" role="dialog" aria-modal="true" aria-label="' + h(selected.id ? '编辑 Provider' : '新增 Provider') + '">' +
             '<header class="modal-head">' +
               '<h2>' + h(selected.id ? '编辑 Provider' : '新增 Provider') + '</h2>' +
               '<button class="ghost icon-button" data-action="provider-modal-close" title="关闭" aria-label="关闭">×</button>' +
@@ -1588,22 +1724,32 @@ export function getManagerHtml(webview: vscode.Webview): string {
             return '<div class="model-ledger-row ' + (warning ? 'has-warning' : '') + '" data-model-row-index="' + index + '">' +
               '<div class="model-ledger-main">' +
                 modelParameterInput(index, 'id', model.id || '', '例如 glm-5.3', 'text') +
-                modelParameterInput(index, 'contextWindow', model.contextWindow || '', '例如 128000', 'number') +
-                modelParameterInput(index, 'compactThresholdPercent', model.compactThresholdPercent === undefined ? '' : model.compactThresholdPercent, '选择候选或手动填写', 'number', '1', '99') +
-                modelParameterInput(index, 'maxOutputTokens', model.maxOutputTokens || '', '例如 32000', 'number') +
+                modelParameterInput(index, 'contextWindow', model.contextWindow || '', '例如 128000', 'number', undefined, undefined, model) +
+                modelParameterInput(index, 'compactThresholdPercent', model.compactThresholdPercent === undefined ? '' : model.compactThresholdPercent, '点击选择或手动填写', 'number', '1', '99', model) +
+                modelParameterInput(index, 'maxOutputTokens', model.maxOutputTokens || '', '例如 32000', 'number', undefined, undefined, model) +
                 '<button type="button" class="ghost model-ledger-remove" data-action="provider-model-remove" data-model-index="' + index + '" title="删除模型" aria-label="删除模型">×</button>' +
               '</div>' +
-              '<div data-model-suggestion-for="' + attr(model.id || '') + '">' + renderModelSuggestion(model, index) + '</div>' +
               '<div class="model-warning" data-model-warning="' + index + '" ' + (warning ? '' : 'hidden') + '>' + h(warning) + '</div>' +
             '</div>';
           }).join('') +
         '</div>';
       }
 
-      function modelParameterInput(index, fieldName, currentValue, placeholder, type, min, max) {
-        return '<input id="providerModel_' + index + '_' + fieldName + '" type="' + attr(type) + '" value="' + attr(currentValue) + '" placeholder="' + attr(placeholder) + '" ' +
+      function modelParameterInput(index, fieldName, currentValue, placeholder, type, min, max, model) {
+        const inputId = 'providerModel_' + index + '_' + fieldName;
+        const menuId = inputId + '_candidates';
+        const input = '<input id="' + inputId + '" type="' + attr(type) + '" value="' + attr(currentValue) + '" placeholder="' + attr(placeholder) + '" ' +
           (type === 'number' ? 'step="1" ' : '') + (min ? 'min="' + attr(min) + '" ' : '') + (max ? 'max="' + attr(max) + '" ' : '') +
+          (fieldName === 'id' ? '' : 'aria-haspopup="listbox" aria-expanded="false" aria-controls="' + menuId + '" ') +
           'data-provider-model-field="' + attr(fieldName) + '" data-model-index="' + index + '" autocomplete="off" spellcheck="false">';
+        if (fieldName === 'id') {
+          return input;
+        }
+        return '<div class="model-parameter-control" data-model-parameter-control="1">' + input +
+          '<div id="' + menuId + '" class="model-candidate-menu" role="listbox" aria-label="' + attr(modelParameterFieldLabel(fieldName) + '候选') + '" data-model-candidate-menu="' + attr(fieldName) + '" data-model-index="' + index + '" hidden>' +
+            renderModelCandidateOptions(model, index, fieldName) +
+          '</div>' +
+        '</div>';
       }
 
       function renderModelBatchEditor(models) {
@@ -1614,37 +1760,33 @@ export function getManagerHtml(webview: vscode.Webview): string {
         '</div>';
       }
 
-      function renderModelSuggestion(model, index) {
+      function renderModelCandidateOptions(model, index, fieldName) {
         const modelId = String(model.id || '').trim();
         if (!modelId) {
-          return '<div class="model-suggestion-strip"><span>输入模型 ID 后显示参数候选。</span></div>';
+          return '<div class="model-candidate-empty">先输入模型 ID。</div>';
         }
         const suggestions = modelSuggestions[modelId];
         if (!suggestions) {
-          return '<div class="model-suggestion-strip"><span>正在识别模型参数...</span></div>';
+          return '<div class="model-candidate-empty">正在识别候选...</div>';
         }
-        const buttons = [];
-        (suggestions.contextWindow || []).forEach(function (candidate) {
-          buttons.push(candidateButton(index, 'contextWindow', candidate, '上下文'));
-        });
-        (suggestions.compactThresholdPercent || []).forEach(function (candidate) {
-          buttons.push(candidateButton(index, 'compactThresholdPercent', candidate, '压缩'));
-        });
-        (suggestions.maxOutputTokens || []).forEach(function (candidate) {
-          buttons.push(candidateButton(index, 'maxOutputTokens', candidate, '输出'));
-        });
-        return '<div class="model-suggestion-strip">' +
-          '<span class="model-suggestion-source">' + h(suggestions.sourceLabel) + '</span>' +
-          buttons.join('') +
-          '<button type="button" class="candidate-button" data-action="model-candidate-fill" data-model-index="' + index + '">填充空项</button>' +
-        '</div>';
+        const candidates = suggestions[fieldName] || [];
+        if (!candidates.length) {
+          return '<div class="model-candidate-empty">没有可用候选。</div>';
+        }
+        return candidates.map(function (candidate) {
+            return candidateButton(index, fieldName, candidate);
+          }).join('');
       }
 
-      function candidateButton(index, fieldName, candidate, prefix) {
+      function candidateButton(index, fieldName, candidate) {
         const suffix = fieldName === 'compactThresholdPercent' ? '%' : '';
-        return '<button type="button" class="candidate-button" data-action="model-candidate-apply" data-model-index="' + index + '" data-model-field="' + attr(fieldName) + '" data-model-value="' + attr(candidate.value) + '" title="' + attr(candidate.label) + '">' +
-          h(prefix + ' ' + formatInteger(candidate.value) + suffix) +
+        return '<button type="button" class="model-candidate-option" role="option" data-action="model-candidate-apply" data-model-index="' + index + '" data-model-field="' + attr(fieldName) + '" data-model-value="' + attr(candidate.value) + '">' +
+          '<span class="model-candidate-value">' + h(formatInteger(candidate.value) + suffix) + '</span>' +
         '</button>';
+      }
+
+      function modelParameterFieldLabel(fieldName) {
+        return fieldName === 'contextWindow' ? '上下文窗口' : fieldName === 'compactThresholdPercent' ? '压缩阈值' : '最大输出';
       }
 
       function formatInteger(value) {
@@ -1779,18 +1921,22 @@ export function getManagerHtml(webview: vscode.Webview): string {
             '<div class="runtime-grid">' +
               fieldWithHelp('自动压缩比例覆盖 %', '写入 CLAUDE_AUTOCOMPACT_PCT_OVERRIDE。留空表示不由插件设置。', '<input id="claudeAutoCompactPctOverride" data-claude-runtime-setting="autoCompactPctOverride" type="number" min="1" max="99" step="1" value="' + attr(runtimeSettings.autoCompactPctOverride || '') + '" placeholder="不设置">') +
               runtimeModeField('claudeAttributionHeader', 'Attribution Header', runtimeSettings.attributionHeader, 'CLAUDE_CODE_ATTRIBUTION_HEADER') +
-              runtimeModeField('claudeDisableNonessentialTraffic', '禁用非必要流量', runtimeSettings.disableNonessentialTraffic, 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC') +
+              runtimeModeField('claudeDisableNonessentialTraffic', '非必要流量', runtimeSettings.disableNonessentialTraffic, 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', [
+                ['unset', '不设置'],
+                ['disabled', '允许'],
+                ['enabled', '禁用']
+              ]) +
               runtimeModeField('claudeExperimentalAgentTeams', '实验性 Agent Teams', runtimeSettings.experimentalAgentTeams, 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS') +
               runtimeModeField('claudeEnableToolSearch', 'Tool Search', runtimeSettings.enableToolSearch, 'ENABLE_TOOL_SEARCH') +
-              runtimeModeField('claudeSandbox', 'Sandbox', runtimeSettings.sandbox, '原生 sandbox.enabled') +
+              runtimeModeField('claudeSandbox', '沙箱环境', runtimeSettings.sandbox, 'IS_SANDBOX') +
             '</div>' +
             renderClaudeChangePreview(agent, provider, selectedModels, runtimeSettings, disabled) +
           '</div>' +
         '</section>';
       }
 
-      function runtimeModeField(id, label, selected, settingName) {
-        return fieldWithHelp(label, settingName, select(id, [
+      function runtimeModeField(id, label, selected, settingName, options) {
+        return fieldWithHelp(label, settingName, select(id, options || [
           ['unset', '不设置'],
           ['enabled', '启用'],
           ['disabled', '禁用']
@@ -1804,6 +1950,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const provider = state.providers.find(function (item) { return item.id === selectedId; });
         let disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
         const selectedModel = selectedCodexModelValue(provider, selectedId, agent);
+        const runtimeSettings = drafts.codexRuntimeSettings || agent.runtimeSettings || {};
         let notices = renderParseNotice(agent);
         if (provider && provider.models.length === 0) {
           notices += '<div class="notice">该 Provider 还没有模型列表，请先回到 Providers 添加模型。</div>';
@@ -1816,9 +1963,43 @@ export function getManagerHtml(webview: vscode.Webview): string {
           '<div class="form">' +
             '<h3 class="section-title">Codex 模型</h3>' +
             fieldGroup('model', modelSelect('codexModel', provider, selectedModel, disabled)) +
-            renderCodexChangePreview(agent, provider, selectedModel, disabled) +
+            '<h3 class="section-title">运行设置</h3>' +
+            '<div class="runtime-grid">' +
+              codexRuntimeField('codexServiceTier', 'Service tier', 'service_tier', runtimeSettings.serviceTier, [
+                ['auto', 'auto（自动）'],
+                ['default', 'default（标准）'],
+                ['flex', 'flex'],
+                ['priority', 'priority（Fast）']
+              ], '写入 service_tier。实际可用档位取决于模型和上游 Provider。\\n' +
+                '不设置：不由插件管理现有值。\\n' +
+                'auto：使用项目配置的服务档位；项目未指定时通常使用 default。\\n' +
+                'default：标准处理档位。\\n' +
+                'flex：弹性处理，通常成本更低，但响应更慢，并可能临时无可用资源。\\n' +
+                'priority：优先处理（Fast），通常延迟更低、成本更高，需要上游支持。') +
+              codexRuntimeField('codexSandboxMode', 'Sandbox mode', 'sandbox_mode', runtimeSettings.sandboxMode, [
+                ['read-only', 'read-only（只读）'],
+                ['workspace-write', 'workspace-write（工作区可写）'],
+                ['danger-full-access', 'danger-full-access（完全访问）']
+              ]) +
+              codexRuntimeField('codexApprovalPolicy', 'Approval policy', 'approval_policy', runtimeSettings.approvalPolicy, [
+                ['untrusted', 'untrusted（非信任命令需确认）'],
+                ['on-request', 'on-request（按需确认）'],
+                ['never', 'never（不请求确认）']
+              ]) +
+            '</div>' +
+            renderCodexChangePreview(agent, provider, selectedModel, runtimeSettings, disabled) +
           '</div>' +
         '</section>';
+      }
+
+      function codexRuntimeField(id, label, settingName, selected, options, help) {
+        return fieldWithHelp(label, help || ('写入 ' + settingName + '。不设置时保留非插件管理的现有值。'), select(
+          id,
+          [['', '不设置']].concat(options),
+          selected || '',
+          false,
+          'codex-runtime-select'
+        ).replace('<select ', '<select data-codex-runtime-setting="' + attr(settingName) + '" '));
       }
 
       function renderOpencode() {
@@ -1832,12 +2013,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (provider && provider.models.length === 0) {
           notices += '<div class="notice">该 Provider 还没有模型列表，请先回到 Providers 添加模型。</div>';
         }
-        const selectedModelConfig = findProviderModelConfig(provider, selectedModel);
-        if (provider && selectedModel && (!selectedModelConfig || !selectedModelConfig.contextWindow || !selectedModelConfig.maxOutputTokens)) {
-          disabled = true;
-          notices += '<div class="notice">opencode 当前模型需要同时配置上下文窗口和最大输出。请先回到 Providers 补齐参数。</div>';
-        }
-
         return '<section class="agent-panel">' +
           renderConfigPath('opencode', 'opencode.json', agent) +
           notices +
@@ -1904,12 +2079,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         providerModal.models[index][fieldName] = fieldName === 'id' ? input.value : optionalIntegerText(input.value);
         if (fieldName === 'id') {
-          const row = document.querySelector('[data-model-row-index="' + index + '"]');
-          const suggestion = row && row.querySelector('[data-model-suggestion-for]');
-          if (suggestion) {
-            suggestion.setAttribute('data-model-suggestion-for', input.value.trim());
-            suggestion.innerHTML = renderModelSuggestion(providerModal.models[index], index);
-          }
+          updateModelCandidateMenus(index);
         }
       }
 
@@ -1965,6 +2135,87 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }, 250);
       }
 
+      function toggleHelpPopover(button) {
+        const control = button && button.closest ? button.closest('[data-help-control]') : null;
+        const popover = control && control.querySelector('[data-help-popover]');
+        if (!control || !popover) {
+          return;
+        }
+        const shouldOpen = popover.hidden;
+        closeHelpPopovers(control);
+        if (shouldOpen) {
+          popover.hidden = false;
+          button.setAttribute('aria-expanded', 'true');
+        } else {
+          closeHelpControl(control);
+        }
+      }
+
+      function closeHelpPopovers(exceptControl) {
+        document.querySelectorAll('[data-help-control]').forEach(function (control) {
+          if (control !== exceptControl) {
+            closeHelpControl(control);
+          }
+        });
+      }
+
+      function closeHelpControl(control) {
+        const popover = control.querySelector('[data-help-popover]');
+        const button = control.querySelector('[data-action="help-toggle"]');
+        if (popover) {
+          popover.hidden = true;
+        }
+        if (button) {
+          button.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      function openModelCandidateMenu(input) {
+        const control = input && input.closest ? input.closest('[data-model-parameter-control]') : null;
+        if (!control) {
+          return;
+        }
+        closeModelCandidateMenus(control);
+        const menu = control.querySelector('[data-model-candidate-menu]');
+        if (menu) {
+          menu.hidden = false;
+          input.setAttribute('aria-expanded', 'true');
+        }
+      }
+
+      function closeModelCandidateMenus(exceptControl) {
+        document.querySelectorAll('[data-model-parameter-control]').forEach(function (control) {
+          if (control !== exceptControl) {
+            closeModelCandidateControl(control);
+          }
+        });
+      }
+
+      function closeModelCandidateControl(control) {
+        const menu = control.querySelector('[data-model-candidate-menu]');
+        const input = control.querySelector('[data-provider-model-field]');
+        if (menu) {
+          menu.hidden = true;
+        }
+        if (input) {
+          input.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      function updateModelCandidateMenus(index) {
+        if (!providerModal || !providerModal.models[index]) {
+          return;
+        }
+        const row = document.querySelector('[data-model-row-index="' + index + '"]');
+        if (!row) {
+          return;
+        }
+        row.querySelectorAll('[data-model-candidate-menu]').forEach(function (menu) {
+          const fieldName = menu.getAttribute('data-model-candidate-menu') || '';
+          menu.innerHTML = renderModelCandidateOptions(providerModal.models[index], index, fieldName);
+        });
+      }
+
       function updateModelSuggestionDom(modelId) {
         if (!providerModal) {
           return;
@@ -1973,13 +2224,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           if (String(model.id || '').trim() !== modelId) {
             return;
           }
-          const element = Array.from(document.querySelectorAll('[data-model-suggestion-for]')).find(function (candidate) {
-            return candidate.getAttribute('data-model-suggestion-for') === modelId
-              && candidate.closest('[data-model-row-index]').getAttribute('data-model-row-index') === String(index);
-          });
-          if (element) {
-            element.innerHTML = renderModelSuggestion(model, index);
-          }
+          updateModelCandidateMenus(index);
         });
       }
 
@@ -1995,31 +2240,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const input = document.getElementById('providerModel_' + index + '_' + fieldName);
         if (input) {
           input.value = String(nextValue);
-        }
-        updateModelRowWarning(index);
-      }
-
-      function fillModelCandidate(button) {
-        updateProviderModalModelsFromTable();
-        const index = Number(button.getAttribute('data-model-index'));
-        const model = providerModal && providerModal.models[index];
-        const suggestions = model && modelSuggestions[String(model.id || '').trim()];
-        if (!model || !suggestions) {
-          return;
-        }
-        ['contextWindow', 'compactThresholdPercent', 'maxOutputTokens'].forEach(function (fieldName) {
-          if (model[fieldName]) {
-            return;
+          if (typeof input.focus === 'function') {
+            input.focus();
           }
-          const candidates = suggestions[fieldName] || [];
-          if (candidates.length) {
-            model[fieldName] = Number(candidates[0].value);
-            const input = document.getElementById('providerModel_' + index + '_' + fieldName);
-            if (input) {
-              input.value = String(model[fieldName]);
-            }
-          }
-        });
+        }
+        closeModelCandidateMenus();
         updateModelRowWarning(index);
       }
 
@@ -2532,13 +2757,13 @@ export function getManagerHtml(webview: vscode.Webview): string {
           managedPreviewRow(agent, 'env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', claudeModeValue(agent.runtimeSettings.disableNonessentialTraffic, '1', '0'), claudeModeValue(runtimeSettings.disableNonessentialTraffic, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', claudeModeValue(agent.runtimeSettings.experimentalAgentTeams, '1', '0'), claudeModeValue(runtimeSettings.experimentalAgentTeams, '1', '0')),
           managedPreviewRow(agent, 'env.ENABLE_TOOL_SEARCH', claudeModeValue(agent.runtimeSettings.enableToolSearch, 'true', 'false'), claudeModeValue(runtimeSettings.enableToolSearch, 'true', 'false')),
-          managedPreviewRow(agent, 'sandbox.enabled', claudeModeValue(agent.runtimeSettings.sandbox, true, false), claudeModeValue(runtimeSettings.sandbox, true, false))
+          managedPreviewRow(agent, 'env.IS_SANDBOX', claudeModeValue(agent.runtimeSettings.sandbox, '1', '0'), claudeModeValue(runtimeSettings.sandbox, '1', '0'))
         ]);
 
         return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-claude', disabled));
       }
 
-      function renderCodexChangePreview(agent, provider, selectedModel, disabled) {
+      function renderCodexChangePreview(agent, provider, selectedModel, runtimeSettings, disabled) {
         if (!provider) {
           return '';
         }
@@ -2556,6 +2781,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
           managedPreviewRow(agent, providerKey + '.requires_openai_auth', hasCurrentBlock ? agent.requiresOpenAiAuth : undefined, Boolean(provider.apiKey)),
           managedPreviewRow(agent, 'model_context_window', agent.modelContextWindow, modelConfig && modelConfig.contextWindow),
           managedPreviewRow(agent, 'model_auto_compact_token_limit', agent.modelAutoCompactTokenLimit, limits.compactAtTokens),
+          managedPreviewRow(agent, 'service_tier', agent.runtimeSettings && agent.runtimeSettings.serviceTier, runtimeSettings.serviceTier),
+          managedPreviewRow(agent, 'sandbox_mode', agent.runtimeSettings && agent.runtimeSettings.sandboxMode, runtimeSettings.sandboxMode),
+          managedPreviewRow(agent, 'approval_policy', agent.runtimeSettings && agent.runtimeSettings.approvalPolicy, runtimeSettings.approvalPolicy),
           managedPreviewRow(agent.auth, 'OPENAI_API_KEY', agent.openAiApiKey, provider.apiKey, 'auth.json.OPENAI_API_KEY')
         ];
 
@@ -2570,10 +2798,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const hasCurrentBlock = agent.providerKey === provider.key;
         const currentModel = agent.providerKey && agent.model ? agent.providerKey + '/' + agent.model : agent.model;
         const nextModel = selectedModel ? provider.key + '/' + selectedModel : '';
-        const completeModels = provider.models.filter(function (model) { return Boolean(model.contextWindow && model.maxOutputTokens); });
+        const configuredModels = provider.models.filter(function (model) { return Boolean(model.contextWindow || model.maxOutputTokens); });
         const selectedConfig = findProviderModelConfig(provider, selectedModel);
         const limits = selectedConfig ? calculateModelLimitsClient(selectedConfig) : {};
-        const nextModelCount = completeModels.length;
+        const nextModelCount = configuredModels.length;
         const rows = [
           managedPreviewRow(agent, 'model', currentModel, nextModel),
           managedPreviewRow(agent, providerKey + '.npm', hasCurrentBlock ? agent.providerNpm : undefined, provider.opencodeNpm),
@@ -2782,8 +3010,17 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function saveCodex() {
         post('saveCodex', {
           providerId: value('codexProviderSelect'),
-          model: value('codexModel')
+          model: value('codexModel'),
+          runtimeSettings: collectCodexRuntimeSettings()
         });
+      }
+
+      function collectCodexRuntimeSettings() {
+        return {
+          serviceTier: value('codexServiceTier') || undefined,
+          sandboxMode: value('codexSandboxMode') || undefined,
+          approvalPolicy: value('codexApprovalPolicy') || undefined
+        };
       }
 
       function saveOpencode() {
@@ -2870,7 +3107,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function fieldWithHelp(label, help, control) {
-        return '<label><span class="label-line"><span>' + h(label) + '</span><span class="help-icon" title="' + attr(help) + '" aria-label="' + attr(help) + '">?</span></span>' + control + '</label>';
+        helpIdSerial += 1;
+        const helpId = 'fieldHelp_' + helpIdSerial;
+        return '<div class="field"><span class="label-line"><span>' + h(label) + '</span>' +
+          '<span class="help-control" data-help-control="1">' +
+            '<button type="button" class="help-icon" data-action="help-toggle" aria-label="查看' + attr(label) + '说明" aria-expanded="false" aria-controls="' + helpId + '">?</button>' +
+            '<span id="' + helpId + '" class="help-popover" data-help-popover="1" role="tooltip" hidden>' + h(help) + '</span>' +
+          '</span>' +
+        '</span>' + control + '</div>';
       }
 
       function truncateModelOption(label) {

@@ -30,6 +30,16 @@ export interface ClaudeRuntimeSettings {
   sandbox: ClaudeSettingMode;
 }
 
+export type CodexServiceTier = 'auto' | 'default' | 'flex' | 'priority';
+export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+export type CodexApprovalPolicy = 'untrusted' | 'on-request' | 'never';
+
+export interface CodexRuntimeSettings {
+  serviceTier?: CodexServiceTier;
+  sandboxMode?: CodexSandboxMode;
+  approvalPolicy?: CodexApprovalPolicy;
+}
+
 export interface ProviderConfig {
   id: string;
   key: string;
@@ -79,6 +89,7 @@ export interface CodexAgentState extends AgentConfigFileState {
   model: string;
   modelContextWindow: number | null;
   modelAutoCompactTokenLimit: number | null;
+  runtimeSettings: CodexRuntimeSettings;
 }
 
 export interface OpencodeAgentState extends AgentConfigFileState {
@@ -116,6 +127,7 @@ export interface SaveClaudePayload {
 export interface SaveCodexPayload {
   providerId: string;
   model: string;
+  runtimeSettings: CodexRuntimeSettings;
 }
 
 export interface SaveOpencodePayload {

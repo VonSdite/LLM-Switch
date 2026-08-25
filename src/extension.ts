@@ -303,7 +303,11 @@ async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: Ag
     return true;
   }
   if (agent === 'codex') {
-    await saveCodexConfig(context, providers, { providerId: selected.providerId, model: selected.model });
+    await saveCodexConfig(context, providers, {
+      providerId: selected.providerId,
+      model: selected.model,
+      runtimeSettings: agents.codex.runtimeSettings
+    });
     return true;
   }
   await saveOpencodeConfig(context, providers, { providerId: selected.providerId, model: selected.model });

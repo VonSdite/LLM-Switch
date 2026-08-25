@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import Module from 'node:module';
 import test from 'node:test';
 import * as TOML from '@iarna/toml';
-import { ProviderConfig, SaveClaudePayload } from './types';
+import { ProviderConfig, SaveClaudePayload, SaveCodexPayload } from './types';
 
 interface FakeUri {
   fsPath: string;
@@ -73,9 +73,18 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
         sandbox: 'enabled'
       }
     };
+    const codexPayload: SaveCodexPayload = {
+      providerId: provider.id,
+      model: 'glm-5.3',
+      runtimeSettings: {
+        serviceTier: 'priority',
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'on-request'
+      }
+    };
 
     await agentConfigs.saveClaudeConfig(context, [provider], claudePayload);
-    await agentConfigs.saveCodexConfig(context, [provider], { providerId: provider.id, model: 'glm-5.3' });
+    await agentConfigs.saveCodexConfig(context, [provider], codexPayload);
     await agentConfigs.saveOpencodeConfig(context, [provider], { providerId: provider.id, model: 'glm-5.3' });
 
     const claude = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
@@ -87,15 +96,37 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(claudeEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
     assert.equal(claudeEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
     assert.equal(claudeEnv.ENABLE_TOOL_SEARCH, 'true');
-    assert.deepEqual(claude.sandbox, { enabled: true });
+    assert.equal(claudeEnv.IS_SANDBOX, '1');
+    assert.equal(claude.sandbox, undefined);
+
+    await agentConfigs.saveClaudeConfig(context, [provider], {
+      ...claudePayload,
+      runtimeSettings: { ...claudePayload.runtimeSettings, sandbox: 'disabled' }
+    });
+    const claudeWithSandboxDisabled = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
+    assert.equal((claudeWithSandboxDisabled.env as Record<string, unknown>).IS_SANDBOX, '0');
+    assert.equal(claudeWithSandboxDisabled.sandbox, undefined);
+    await agentConfigs.saveClaudeConfig(context, [provider], claudePayload);
 
     const codex = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     assert.equal(codex.model_context_window, 1_048_576);
     assert.equal(codex.model_auto_compact_token_limit, 838_860);
+    assert.equal(codex.service_tier, 'priority');
+    assert.equal(codex.sandbox_mode, 'workspace-write');
+    assert.equal(codex.approval_policy, 'on-request');
+    const agents = await agentConfigs.readAgentsState(context, [provider]);
+    assert.deepEqual(agents.codex.runtimeSettings, codexPayload.runtimeSettings);
     const codexProviders = codex.model_providers as Record<string, Record<string, unknown>>;
     assert.equal(codexProviders['provider-one'].requires_openai_auth, true);
     const codexAuth = JSON.parse(await fs.readFile(codexAuthPath, 'utf8')) as Record<string, unknown>;
     assert.equal(codexAuth.OPENAI_API_KEY, 'provider-token');
+
+    await agentConfigs.saveCodexConfig(context, [provider], { ...codexPayload, runtimeSettings: {} });
+    const codexWithoutRuntimeSettings = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
+    assert.equal(codexWithoutRuntimeSettings.service_tier, undefined);
+    assert.equal(codexWithoutRuntimeSettings.sandbox_mode, undefined);
+    assert.equal(codexWithoutRuntimeSettings.approval_policy, undefined);
+    await agentConfigs.saveCodexConfig(context, [provider], codexPayload);
 
     const opencode = JSON.parse(await fs.readFile(opencodePath, 'utf8')) as Record<string, unknown>;
     assert.deepEqual(opencode.compaction, { reserved: 209_716 });
@@ -126,10 +157,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(preserved.sandbox, undefined);
 
     await fs.writeFile(codexAuthPath, '{"OPENAI_API_KEY":"user-edited-key"}\n');
-    await agentConfigs.saveCodexConfig(context, [providerWithoutKey], {
-      providerId: provider.id,
-      model: 'glm-5.3'
-    });
+    await agentConfigs.saveCodexConfig(context, [providerWithoutKey], codexPayload);
     const codexWithoutKey = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     const codexWithoutKeyProviders = codexWithoutKey.model_providers as Record<string, Record<string, unknown>>;
     assert.equal(codexWithoutKeyProviders['provider-one'].requires_openai_auth, false);
@@ -150,10 +178,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
         sandbox: 'unset'
       }
     });
-    await agentConfigs.saveCodexConfig(context, [providerWithoutCompact], {
-      providerId: provider.id,
-      model: 'glm-5.3'
-    });
+    await agentConfigs.saveCodexConfig(context, [providerWithoutCompact], codexPayload);
     await agentConfigs.saveOpencodeConfig(context, [providerWithoutCompact], {
       providerId: provider.id,
       model: 'glm-5.3'
@@ -165,6 +190,43 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(codexWithoutCompact.model_auto_compact_token_limit, undefined);
     const opencodeWithoutCompact = JSON.parse(await fs.readFile(opencodePath, 'utf8')) as Record<string, unknown>;
     assert.equal(opencodeWithoutCompact.compaction, undefined);
+
+    const providerWithPartialLimits = {
+      ...providerWithoutKey,
+      models: [
+        { id: 'context-only', contextWindow: 200_000 },
+        { id: 'output-only', maxOutputTokens: 40_000 }
+      ]
+    };
+    await agentConfigs.saveOpencodeConfig(context, [providerWithPartialLimits], {
+      providerId: provider.id,
+      model: 'context-only'
+    });
+    const opencodeWithPartialLimits = JSON.parse(await fs.readFile(opencodePath, 'utf8')) as Record<string, unknown>;
+    const partialProvider = (opencodeWithPartialLimits.provider as Record<string, Record<string, unknown>>)['provider-one'];
+    const partialModels = partialProvider.models as Record<string, unknown>;
+    assert.deepEqual(partialModels['context-only'], {
+      name: 'context-only',
+      limit: { context: 200_000 }
+    });
+    assert.deepEqual(partialModels['output-only'], {
+      name: 'output-only',
+      limit: { output: 40_000 }
+    });
+
+    const providerWithoutLimits = {
+      ...providerWithoutKey,
+      models: [{ id: 'context-only' }]
+    };
+    await agentConfigs.saveOpencodeConfig(context, [providerWithoutLimits], {
+      providerId: provider.id,
+      model: 'context-only'
+    });
+    const opencodeWithoutLimits = JSON.parse(await fs.readFile(opencodePath, 'utf8')) as Record<string, unknown>;
+    const providerWithoutLimitsConfig = (opencodeWithoutLimits.provider as Record<string, Record<string, unknown>>)['provider-one'];
+    assert.equal(opencodeWithoutLimits.model, 'provider-one/context-only');
+    assert.equal(providerWithoutLimitsConfig.models, undefined);
+    assert.equal(opencodeWithoutLimits.compaction, undefined);
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

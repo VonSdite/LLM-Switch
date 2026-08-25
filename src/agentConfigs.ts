@@ -14,6 +14,10 @@ import {
   ClaudeRuntimeSettings,
   ClaudeSettingMode,
   CodexAgentState,
+  CodexApprovalPolicy,
+  CodexRuntimeSettings,
+  CodexSandboxMode,
+  CodexServiceTier,
   OpencodeAgentState,
   ProviderConfig,
   SaveClaudePayload,
@@ -23,6 +27,9 @@ import {
 
 type JsonObject = Record<string, unknown>;
 const MAX_BACKUP_FILES = 5;
+const CODEX_SERVICE_TIERS: readonly CodexServiceTier[] = ['auto', 'default', 'flex', 'priority'];
+const CODEX_SANDBOX_MODES: readonly CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
+const CODEX_APPROVAL_POLICIES: readonly CodexApprovalPolicy[] = ['untrusted', 'on-request', 'never'];
 
 export async function readAgentsState(context: vscode.ExtensionContext, providers: ProviderConfig[]): Promise<AgentsState> {
   const [claude, codex, opencode] = await Promise.all([
@@ -87,7 +94,7 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'], runtimeSettings.disableNonessentialTraffic, '1', '0');
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'], runtimeSettings.experimentalAgentTeams, '1', '0');
   pushClaudeModeField(desired, ['env', 'ENABLE_TOOL_SEARCH'], runtimeSettings.enableToolSearch, 'true', 'false');
-  pushClaudeModeField(desired, ['sandbox', 'enabled'], runtimeSettings.sandbox, true, false);
+  pushClaudeModeField(desired, ['env', 'IS_SANDBOX'], runtimeSettings.sandbox, '1', '0');
 
   const targetId = managedTargetId('claude', filePath);
   reconcileManagedFields(config, await readManagedFields(context, targetId), desired);
@@ -125,6 +132,16 @@ export async function saveCodexConfig(context: vscode.ExtensionContext, provider
       configDesired.push(managedField(['model_auto_compact_token_limit'], compactAtTokens));
     }
   }
+  const runtimeSettings = normalizeCodexRuntimeSettings(payload.runtimeSettings);
+  if (runtimeSettings.serviceTier) {
+    configDesired.push(managedField(['service_tier'], runtimeSettings.serviceTier));
+  }
+  if (runtimeSettings.sandboxMode) {
+    configDesired.push(managedField(['sandbox_mode'], runtimeSettings.sandboxMode));
+  }
+  if (runtimeSettings.approvalPolicy) {
+    configDesired.push(managedField(['approval_policy'], runtimeSettings.approvalPolicy));
+  }
   const authDesired = provider.apiKey ? [managedField(['OPENAI_API_KEY'], provider.apiKey)] : [];
   const configTargetId = managedTargetId('codex', filePath);
   const authTargetId = managedTargetId('codexAuth', authPath);
@@ -146,9 +163,6 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     throw new Error('请选择 opencode 模型。');
   }
   const selectedModelConfig = findProviderModel(provider, model);
-  if (!selectedModelConfig?.contextWindow || !selectedModelConfig.maxOutputTokens) {
-    throw new Error(`opencode 模型 ${model} 需要同时配置上下文窗口和最大输出。`);
-  }
 
   const filePath = await getAgentConfigPath(context, 'opencode');
   await requireExistingConfigFile(filePath);
@@ -163,7 +177,7 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     managedField(['provider', provider.key, 'name'], provider.name),
     managedField(['provider', provider.key, 'options', 'baseURL'], provider.opencodeBaseUrl)
   ];
-  const reserved = calculateModelLimits(selectedModelConfig).reserved;
+  const reserved = selectedModelConfig ? calculateModelLimits(selectedModelConfig).reserved : undefined;
   if (reserved !== undefined) {
     desired.push(managedField(['compaction', 'reserved'], reserved));
   }
@@ -171,15 +185,19 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     desired.push(managedField(['provider', provider.key, 'options', 'apiKey'], provider.apiKey));
   }
   for (const configuredModel of provider.models) {
-    if (!configuredModel.contextWindow || !configuredModel.maxOutputTokens) {
+    const limit: { context?: number; output?: number } = {};
+    if (configuredModel.contextWindow) {
+      limit.context = configuredModel.contextWindow;
+    }
+    if (configuredModel.maxOutputTokens) {
+      limit.output = configuredModel.maxOutputTokens;
+    }
+    if (Object.keys(limit).length === 0) {
       continue;
     }
     desired.push(managedField(['provider', provider.key, 'models', configuredModel.id], {
       name: configuredModel.id,
-      limit: {
-        context: configuredModel.contextWindow,
-        output: configuredModel.maxOutputTokens
-      }
+      limit
     }));
   }
 
@@ -230,7 +248,7 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
         disableNonessentialTraffic: claudeModeFromValue(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1', '0'),
         experimentalAgentTeams: claudeModeFromValue(env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1', '0'),
         enableToolSearch: claudeModeFromValue(env.ENABLE_TOOL_SEARCH, 'true', 'false'),
-        sandbox: claudeModeFromValue(objectValue(config.sandbox).enabled, true, false)
+        sandbox: claudeModeFromValue(env.IS_SANDBOX, '1', '0')
       },
       managedPaths: await readManagedPaths(context, targetId, config)
     };
@@ -267,7 +285,8 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
     hasOpenAiApiKey: false,
     model: '',
     modelContextWindow: null,
-    modelAutoCompactTokenLimit: null
+    modelAutoCompactTokenLimit: null,
+    runtimeSettings: {}
   };
 
   try {
@@ -303,6 +322,11 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
       model,
       modelContextWindow: numberOrNull(config.model_context_window),
       modelAutoCompactTokenLimit: numberOrNull(config.model_auto_compact_token_limit),
+      runtimeSettings: {
+        serviceTier: knownString(config.service_tier, CODEX_SERVICE_TIERS),
+        sandboxMode: knownString(config.sandbox_mode, CODEX_SANDBOX_MODES),
+        approvalPolicy: knownString(config.approval_policy, CODEX_APPROVAL_POLICIES)
+      },
       managedPaths: await readManagedPaths(context, configTargetId, config),
       auth: {
         ...baseState.auth,
@@ -534,6 +558,32 @@ function normalizeClaudeRuntimeSettings(value: unknown): ClaudeRuntimeSettings {
     enableToolSearch: normalizeClaudeMode(raw.enableToolSearch),
     sandbox: normalizeClaudeMode(raw.sandbox)
   };
+}
+
+function normalizeCodexRuntimeSettings(value: unknown): CodexRuntimeSettings {
+  const raw = objectValue(value);
+  return {
+    serviceTier: optionalKnownString(raw.serviceTier, CODEX_SERVICE_TIERS, 'Codex service_tier'),
+    sandboxMode: optionalKnownString(raw.sandboxMode, CODEX_SANDBOX_MODES, 'Codex sandbox_mode'),
+    approvalPolicy: optionalKnownString(raw.approvalPolicy, CODEX_APPROVAL_POLICIES, 'Codex approval_policy')
+  };
+}
+
+function optionalKnownString<T extends string>(value: unknown, allowed: readonly T[], label: string): T | undefined {
+  const text = stringValue(value);
+  if (!text) {
+    return undefined;
+  }
+  const matched = knownString(text, allowed);
+  if (!matched) {
+    throw new Error(`${label} 必须是 ${allowed.join('、')} 之一。`);
+  }
+  return matched;
+}
+
+function knownString<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  const text = stringValue(value);
+  return allowed.includes(text as T) ? text as T : undefined;
 }
 
 function emptyClaudeRuntimeSettings(): ClaudeRuntimeSettings {

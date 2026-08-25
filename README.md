@@ -40,7 +40,7 @@ Provider 字段：
 - `压缩阈值`：可留空；填写时使用 1-99 的整数百分比。
 - `最大输出`：正整数，可留空；填写时小于或等于上下文窗口。
 
-模型参数采用紧凑台账编辑。输入模型 ID 后，插件按“精确 ID、忽略大小写、Provider 前缀、`[1m]` 后缀、明确别名、日期快照”的顺序识别内置参数。候选值独立于已保存值，点击候选或“填充空项”后才会写入表单。
+模型参数采用紧凑台账编辑。输入模型 ID 后，插件按“精确 ID、忽略大小写、Provider 前缀、`[1m]` 后缀、明确别名、日期快照”的顺序识别内置参数。聚焦上下文窗口、压缩阈值或最大输出输入框时显示对应候选列表，选择候选后才会写入表单。
 
 内置候选覆盖智谱 GLM、DeepSeek、通义千问、MiniMax 和 Codex/OpenAI 相关模型。未识别模型会显示以下通用候选：
 
@@ -117,7 +117,7 @@ autoCompactWindow = floor(contextWindow × compactThresholdPercent / 100)
 
 Claude Code 接受 `100000-1000000` 的 `autoCompactWindow`。换算结果超出范围时，插件显示错误并停止保存。Claude 的最大输出参数保存在 Provider 中，用于其他客户端；Claude 配置不接收该字段。
 
-运行设置使用“未设置 / 启用 / 禁用”三态选择。Sandbox 写入原生 `sandbox.enabled`，其余运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
+运行设置使用“未设置 / 启用 / 禁用”三态选择，配置中缺少对应字段时默认选择“不设置”。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
 
 ### Codex
 
@@ -132,6 +132,9 @@ Codex 页面会写入 `config.toml`：
 - `[model_providers.<provider>].requires_openai_auth`
 - `model_context_window`
 - `model_auto_compact_token_limit`
+- `service_tier`
+- `sandbox_mode`
+- `approval_policy`
 
 Codex 页面还会写入 `auth.json`：
 
@@ -141,6 +144,8 @@ Codex 的 `model_provider` 和 `[model_providers.<provider>]` 使用 Provider �
 Provider 配置了 API key 时，`requires_openai_auth` 写入 `true`；API key 为空时写入 `false`。
 
 Codex 使用所选模型的上下文窗口。上下文窗口和压缩阈值都已填写时，插件计算 `model_auto_compact_token_limit`；未选择压缩阈值时，插件清理自己管理的自动压缩字段。
+
+Codex 运行设置默认选择“不设置”。`service_tier` 支持 `auto`、`default`、`flex`、`priority`；`sandbox_mode` 支持 `read-only`、`workspace-write`、`danger-full-access`；`approval_policy` 支持 `untrusted`、`on-request`、`never`。
 
 ### opencode
 
@@ -164,7 +169,7 @@ opencode 使用以下换算：
 compaction.reserved = contextWindow - floor(contextWindow × compactThresholdPercent / 100)
 ```
 
-opencode 的 `limit` 同时接收上下文窗口和最大输出。当前模型需要同时配置这两个值；Provider 中其他参数完整的模型也会写入模型表。压缩阈值已填写时，插件计算 `compaction.reserved`；未填写时不下发压缩配置。
+opencode 按需写入模型参数。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时不下发该模型的 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时不下发压缩配置。
 
 ## 快速切换模型
 
