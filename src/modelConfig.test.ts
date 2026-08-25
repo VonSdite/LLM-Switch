@@ -55,6 +55,21 @@ test('内置候选支持精确、别名、日期快照和通用回退', () => {
   assert.equal(unknown.maxOutputTokens[0].value, 32_000);
 });
 
+test('GPT 内置候选使用 85 压缩阈值', () => {
+  const suggestions = getModelParameterSuggestions('gpt-5.6-sol');
+  assert.deepEqual(suggestions.contextWindow.map((candidate) => candidate.value), [372_000, 400_000, 1_050_000]);
+  assert.equal(suggestions.compactThresholdPercent[0].value, 85);
+  assert.deepEqual(getModelParameterSuggestions('gpt-5.5').contextWindow.map((candidate) => candidate.value), [372_000, 400_000, 1_050_000]);
+  assert.equal(getModelParameterSuggestions('gpt-5.5').compactThresholdPercent[0].value, 85);
+  assert.equal(getModelParameterSuggestions('gpt-5.6').matchKind, 'alias');
+  assert.deepEqual(mergeFetchedModels([], ['gpt-5.6-sol']), [
+    { id: 'gpt-5.6-sol', contextWindow: 372_000, compactThresholdPercent: 85, maxOutputTokens: 128_000 }
+  ]);
+  assert.deepEqual(mergeFetchedModels([], ['gpt-5.5']), [
+    { id: 'gpt-5.5', contextWindow: 372_000, compactThresholdPercent: 85, maxOutputTokens: 128_000 }
+  ]);
+});
+
 test('Claude 1M 后缀归一化且不会重复追加', () => {
   assert.equal(baseClaudeModelId('claude-opus[1M]'), 'claude-opus');
   assert.deepEqual(claudeModelVariants('claude-opus[1m]'), ['claude-opus', 'claude-opus[1m]']);

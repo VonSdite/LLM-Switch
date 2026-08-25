@@ -25,6 +25,7 @@ interface PresetEntry {
   aliases?: string[];
   sourceLabel: string;
   contextWindow: ModelParameterCandidate[];
+  compactThresholdPercent?: ModelParameterCandidate[];
   maxOutputTokens: ModelParameterCandidate[];
 }
 
@@ -33,6 +34,13 @@ const BIGMODEL_GLM_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3'
 const DEEPSEEK_URL = 'https://api-docs.deepseek.com/quick_start/pricing';
 const QWEN_URL = 'https://help.aliyun.com/zh/model-studio/text-generation-model/';
 const MINIMAX_URL = 'https://platform.minimax.io/docs/guides/models-intro';
+const OPENAI_GPT_56_SOL_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-sol';
+const OPENAI_GPT_56_TERRA_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-terra';
+const OPENAI_GPT_56_LUNA_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-luna';
+const OPENAI_GPT_55_URL = 'https://developers.openai.com/api/docs/models/gpt-5.5';
+const OPENAI_GPT_54_URL = 'https://developers.openai.com/api/docs/models/gpt-5.4';
+const OPENAI_GPT_55_RELEASE_URL = 'https://openai.com/index/introducing-gpt-5-5/';
+const OPENAI_CHECKED_AT = '2026-08-26';
 const CHECKED_AT = '2026-08-24';
 
 const official = (value: number, label: string, sourceUrl: string): ModelParameterCandidate => ({
@@ -55,6 +63,35 @@ const fallback = (value: number, label: string): ModelParameterCandidate => ({
   kind: 'fallback',
   label
 });
+
+const openAiOfficial = (value: number, label: string, sourceUrl: string): ModelParameterCandidate => ({
+  value,
+  kind: 'official',
+  label,
+  sourceUrl,
+  checkedAt: OPENAI_CHECKED_AT
+});
+
+const openAiClientDefault = (value: number, label: string): ModelParameterCandidate => ({
+  value,
+  kind: 'client-default',
+  label,
+  checkedAt: OPENAI_CHECKED_AT
+});
+
+const gptContextWindows = (apiUrl: string): ModelParameterCandidate[] => [
+  openAiClientDefault(372_000, 'Codex 默认上下文 372,000'),
+  openAiOfficial(400_000, 'Codex 文档上下文 400,000', OPENAI_GPT_55_RELEASE_URL),
+  openAiOfficial(1_050_000, 'API 文档上下文 1,050,000', apiUrl)
+];
+
+const gptCompactThreshold = (): ModelParameterCandidate[] => [
+  openAiClientDefault(85, 'GPT 建议压缩阈值 85')
+];
+
+const gptMaxOutputTokens = (apiUrl: string): ModelParameterCandidate[] => [
+  openAiOfficial(128_000, 'API 文档最大输出 128,000', apiUrl)
+];
 
 const PRESETS: PresetEntry[] = [
   {
@@ -113,28 +150,40 @@ const PRESETS: PresetEntry[] = [
     ]
   },
   {
-    ids: ['gpt-5.6-sol', 'gpt-5.6-terra'],
-    sourceLabel: 'Codex 客户端默认值，待官方文档复核',
-    contextWindow: [
-      clientDefault(372_000, '当前 Codex 客户端上下文 372,000'),
-      clientDefault(1_048_576, 'API 参考上下文 1,048,576（待复核）')
-    ],
-    maxOutputTokens: [clientDefault(128_000, 'API 参考最大输出 128,000（待复核）')]
+    ids: ['gpt-5.6-sol'],
+    aliases: ['gpt-5.6'],
+    sourceLabel: 'Codex 默认值和 OpenAI 文档候选',
+    contextWindow: gptContextWindows(OPENAI_GPT_56_SOL_URL),
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: gptMaxOutputTokens(OPENAI_GPT_56_SOL_URL)
+  },
+  {
+    ids: ['gpt-5.6-terra'],
+    sourceLabel: 'Codex 默认值和 OpenAI 文档候选',
+    contextWindow: gptContextWindows(OPENAI_GPT_56_TERRA_URL),
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: gptMaxOutputTokens(OPENAI_GPT_56_TERRA_URL)
   },
   {
     ids: ['gpt-5.6-luna'],
-    sourceLabel: 'Codex 客户端默认值，待官方文档复核',
-    contextWindow: [
-      clientDefault(372_000, '当前 Codex 客户端上下文 372,000'),
-      clientDefault(400_000, 'API 参考上下文 400,000（待复核）')
-    ],
-    maxOutputTokens: [clientDefault(128_000, 'API 参考最大输出 128,000（待复核）')]
+    sourceLabel: 'Codex 默认值和 OpenAI 文档候选',
+    contextWindow: gptContextWindows(OPENAI_GPT_56_LUNA_URL),
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: gptMaxOutputTokens(OPENAI_GPT_56_LUNA_URL)
   },
   {
-    ids: ['gpt-5.5', 'gpt-5.4'],
-    sourceLabel: 'Codex 客户端默认值，待官方文档复核',
-    contextWindow: [clientDefault(272_000, '当前 Codex 客户端上下文 272,000')],
-    maxOutputTokens: [clientDefault(128_000, 'API 参考最大输出 128,000（待复核）')]
+    ids: ['gpt-5.5'],
+    sourceLabel: 'Codex 默认值和 OpenAI 文档候选',
+    contextWindow: gptContextWindows(OPENAI_GPT_55_URL),
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: gptMaxOutputTokens(OPENAI_GPT_55_URL)
+  },
+  {
+    ids: ['gpt-5.4'],
+    sourceLabel: 'Codex 默认值和 OpenAI 文档候选',
+    contextWindow: gptContextWindows(OPENAI_GPT_54_URL),
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: gptMaxOutputTokens(OPENAI_GPT_54_URL)
   }
 ];
 
@@ -166,7 +215,7 @@ export function getModelParameterSuggestions(modelId: string): ModelParameterSug
     matchKind: match.matchKind,
     sourceLabel: match.entry.sourceLabel,
     contextWindow: match.entry.contextWindow,
-    compactThresholdPercent: [COMPACT_CANDIDATE],
+    compactThresholdPercent: match.entry.compactThresholdPercent ?? [COMPACT_CANDIDATE],
     maxOutputTokens: match.entry.maxOutputTokens
   };
 }

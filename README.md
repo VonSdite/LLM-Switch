@@ -67,6 +67,7 @@ Provider 弹窗中的 `拉取模型` 会从当前填写的 API 地址推导基�
 - 勾选 `校验证书` 后会校验拉取模型请求中的 SSL 证书；默认不校验。
 - 拉取结果会弹出模型选择窗口，可搜索、勾选、取消勾选。
 - 确认后按模型 ID 合并当前清单；已有模型保留参数，新模型按识别结果或默认值补入上下文窗口、压缩阈值和最大输出。
+- 内置模型候选默认压缩阈值通常为 60%，GPT 系列内置候选默认上下文窗口为 372000、压缩阈值为 85%，并提供 Codex 文档 400000 与 API 文档 1050000 上下文窗口候选。
 
 ## Agents 管理
 
@@ -145,7 +146,7 @@ Codex 页面还会写入 `auth.json`：
 Codex 的 `model_provider` 和 `[model_providers.<provider>]` 使用 Provider 名称。
 Provider 配置了 API key 时，`requires_openai_auth` 写入 `true`；API key 为空时写入 `false`，并清理 `auth.json` 中的 `OPENAI_API_KEY`。
 
-Codex 使用所选模型的上下文窗口。上下文窗口和压缩阈值都已填写时，插件计算 `model_auto_compact_token_limit`；模型未配置上下文窗口时，插件写入 `model_context_window = 372000` 和 `model_auto_compact_token_limit = 350000`。Codex 不写入最大输出窗口配置。
+Codex 使用所选模型的上下文窗口。上下文窗口和压缩阈值都已填写时，插件计算 `model_auto_compact_token_limit`；GPT 系列内置候选默认使用 `model_context_window = 372000` 和 85% 压缩阈值，并可在候选列表选择 Codex 文档 400000 或 API 文档 1050000 上下文窗口。模型未配置上下文窗口时，插件写入 `model_context_window = 372000` 和 `model_auto_compact_token_limit = 350000`。Codex 不写入最大输出窗口配置。
 
 Codex 运行设置默认选择“不设置”。`service_tier` 支持 `auto`、`default`、`flex`、`priority`；`model_reasoning_effort` 支持 `minimal`、`low`、`medium`、`high`、`xhigh`、`max`；`sandbox_mode` 支持 `read-only`、`workspace-write`、`danger-full-access`；`approval_policy` 支持 `untrusted`、`on-request`、`never`。
 

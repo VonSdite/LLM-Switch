@@ -103,7 +103,7 @@ export function defaultFetchedModelConfig(id: string): ProviderModelConfig {
   return {
     id,
     contextWindow: suggestedContextWindow ?? DEFAULT_FETCHED_CONTEXT_WINDOW,
-    compactThresholdPercent: DEFAULT_COMPACT_THRESHOLD_PERCENT,
+    compactThresholdPercent: suggestions.compactThresholdPercent[0]?.value ?? DEFAULT_COMPACT_THRESHOLD_PERCENT,
     maxOutputTokens: suggestedMaxOutputTokens
   };
 }
