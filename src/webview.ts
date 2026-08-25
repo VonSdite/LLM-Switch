@@ -1267,9 +1267,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
           fetchProviderModelsFromModal();
         }
         if (action === 'provider-model-add') {
+          const currentModalBody = document.querySelector('.provider-modal .modal-body');
+          const scrollTop = currentModalBody ? currentModalBody.scrollTop : 0;
           updateProviderModalDraftFromForm();
           providerModal.models.push({ id: '', compactThresholdPercent: defaultCompactThresholdPercent });
           render();
+          const nextModalBody = document.querySelector('.provider-modal .modal-body');
+          if (nextModalBody) {
+            nextModalBody.scrollTop = scrollTop;
+          }
         }
         if (action === 'provider-model-remove') {
           const currentModalBody = document.querySelector('.provider-modal .modal-body');
@@ -2417,6 +2423,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       function saveProviderFromModal() {
         const payload = collectProviderForm();
+        payload.models = providerModelsWithId(payload.models);
         if (!payload.name.trim()) {
           toast('error', 'Provider 名称必填。');
           return;
@@ -2447,6 +2454,12 @@ export function getManagerHtml(webview: vscode.Webview): string {
         modelFetchBusy = false;
         render();
         post('saveProvider', payload);
+      }
+
+      function providerModelsWithId(models) {
+        return (models || []).filter(function (model) {
+          return String(model && model.id || '').trim();
+        });
       }
 
       function collectProviderForm() {

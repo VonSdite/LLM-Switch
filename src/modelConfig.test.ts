@@ -20,6 +20,16 @@ test('严格校验拒绝大于上下文窗口的最大输出', () => {
   }], true), /最大输出不能大于上下文窗口/);
 });
 
+test('严格保存 Provider 时忽略空模型 ID 行', () => {
+  assert.deepEqual(normalizeProviderModels([
+    { id: 'glm-5.3', contextWindow: 1_048_576, compactThresholdPercent: 60 },
+    { id: '', contextWindow: 200_000, compactThresholdPercent: 60, maxOutputTokens: 32_000 },
+    { id: '   ', contextWindow: 128_000 }
+  ], true), [
+    { id: 'glm-5.3', contextWindow: 1_048_576, compactThresholdPercent: 60, maxOutputTokens: undefined }
+  ]);
+});
+
 test('拉取模型按 ID 保留参数并为新模型补默认参数', () => {
   const merged = mergeFetchedModels([{
     id: 'glm-5.3',

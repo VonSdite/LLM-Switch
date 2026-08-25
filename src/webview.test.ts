@@ -4,6 +4,11 @@ import { getManagerHtml } from './webview';
 
 interface FakeElement {
   innerHTML: string;
+  checked?: boolean;
+  type?: string;
+  value?: string;
+  focus?(): void;
+  setAttribute?(name: string, value: string): void;
 }
 
 interface WebviewHarness {
@@ -50,8 +55,10 @@ test('Webview 脚本可解析并渲染 Provider 模型参数台账', () => {
       maxOutputTokens: [{ value: 66_666, label: '测试输出候选' }]
     }
   });
+  harness.setProviderModalScroll(180);
   harness.click('provider-model-add');
 
+  assert.equal(harness.providerModalScroll(), 180);
   assert.match(harness.app.innerHTML, /777777/);
   assert.match(harness.app.innerHTML, /id="providerModel_1_compactThresholdPercent"[^>]*value="60"/);
   assert.match(harness.app.innerHTML, /model-candidate-option/);
@@ -65,6 +72,46 @@ test('Webview 脚本可解析并渲染 Provider 模型参数台账', () => {
   harness.setProviderModalScroll(240);
   harness.click('provider-model-remove', { 'data-model-index': '1' });
   assert.equal(harness.providerModalScroll(), 240);
+});
+
+test('保存 Provider 时忽略空模型 ID 行', () => {
+  const provider = {
+    ...providerFixture(),
+    models: [
+      {
+        id: 'glm-5.3',
+        contextWindow: 1_048_576,
+        compactThresholdPercent: 60,
+        maxOutputTokens: 131_072
+      },
+      { id: '', contextWindow: 200_000, compactThresholdPercent: 60, maxOutputTokens: 32_000 },
+      { id: '   ', contextWindow: 128_000 }
+    ]
+  };
+  const harness = createHarness({ activeTab: 'providers', activeAgentTab: 'claude' });
+  harness.sendState({
+    providers: [provider],
+    agents: {}
+  });
+  harness.click('provider-edit', { 'data-provider-id': 'provider-1' });
+  harness.click('provider-save');
+
+  const saveProvider = harness.messages.find((message): message is { type: string; payload: { models: unknown[] } } => {
+    const payload = (message as { payload?: unknown }).payload;
+    return isMessageType(message, 'saveProvider')
+      && Boolean(payload && typeof payload === 'object' && Array.isArray((payload as { models?: unknown }).models));
+  });
+  assert.ok(saveProvider);
+  assert.deepEqual(saveProvider.payload.models, [{
+    id: 'glm-5.3',
+    contextWindow: 1_048_576,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 131_072
+  }]);
+  assert.equal(harness.messages.some((message) => (
+    isMessageType(message, 'toast')
+      && String((message as { payload?: { message?: unknown } }).payload?.message || '').includes('模型 ID 不能为空')
+  )), false);
 });
 
 test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
@@ -248,7 +295,13 @@ function createHarness(restoredState: Record<string, unknown>): WebviewHarness {
       (documentListeners[type] ||= []).push(listener);
     },
     getElementById(id: string): FakeElement | null {
-      return id === 'app' ? app : id === 'tabs' ? tabs : null;
+      if (id === 'app') {
+        return app;
+      }
+      if (id === 'tabs') {
+        return tabs;
+      }
+      return formElementById(appHtml, id);
     },
     querySelectorAll(): unknown[] {
       return [];
@@ -308,6 +361,58 @@ function createHarness(restoredState: Record<string, unknown>): WebviewHarness {
       }
     }
   };
+}
+
+function formElementById(html: string, id: string): FakeElement | null {
+  const input = elementTagById(html, 'input', id);
+  if (input) {
+    return {
+      innerHTML: '',
+      checked: /\schecked(?:\s|>|$)/.test(input),
+      type: attributeValue(input, 'type') || 'text',
+      value: attributeValue(input, 'value'),
+      focus: () => undefined,
+      setAttribute: () => undefined
+    };
+  }
+
+  const select = html.match(new RegExp(`<select\\b[^>]*id="${escapeRegExp(id)}"[^>]*>([\\s\\S]*?)<\\/select>`));
+  if (select) {
+    const selected = select[1].match(/<option\b[^>]*\sselected\b[^>]*>/)
+      || select[1].match(/<option\b[^>]*>/);
+    return {
+      innerHTML: select[1],
+      value: selected ? attributeValue(selected[0], 'value') : '',
+      focus: () => undefined,
+      setAttribute: () => undefined
+    };
+  }
+
+  return null;
+}
+
+function elementTagById(html: string, tagName: string, id: string): string | null {
+  const match = html.match(new RegExp(`<${tagName}\\b[^>]*id="${escapeRegExp(id)}"[^>]*>`));
+  return match ? match[0] : null;
+}
+
+function attributeValue(tag: string, name: string): string {
+  const match = tag.match(new RegExp(`\\b${escapeRegExp(name)}="([^"]*)"`));
+  return match ? decodeHtmlAttribute(match[1]) : '';
+}
+
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&#10;/g, '\n')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function providerFixture(): Record<string, unknown> {

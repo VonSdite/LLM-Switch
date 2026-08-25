@@ -20,9 +20,6 @@ export function normalizeProviderModels(value: unknown, strict = false): Provide
     const raw = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : undefined;
     const id = (raw ? stringValue(raw.id) : stringValue(item)).trim();
     if (!id) {
-      if (strict) {
-        throw new Error('模型 ID 不能为空。');
-      }
       continue;
     }
     if (seen.has(id)) {
