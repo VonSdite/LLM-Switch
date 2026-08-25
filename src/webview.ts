@@ -657,22 +657,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
       color: var(--vscode-inputValidation-warningForeground);
     }
     .model-ledger-actions,
-    .model-batch-actions,
     .runtime-grid {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
-    }
-    .model-batch {
-      display: grid;
-      gap: 7px;
-      padding: 9px;
-      border: 1px solid var(--vscode-panel-border);
-      border-radius: 5px;
-    }
-    .model-batch textarea {
-      min-height: 90px;
     }
     .runtime-grid {
       display: grid;
@@ -1154,7 +1143,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
       let draggedProviderId = null;
       let dragOverProviderId = null;
       let searchSelectState = null;
-      let providerBatchOpen = false;
       let modelSuggestions = {};
       let suggestionRequestSerial = 0;
       let suggestionRequests = {};
@@ -1272,17 +1260,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
           render();
         }
         if (action === 'provider-model-remove') {
+          const currentModalBody = document.querySelector('.provider-modal .modal-body');
+          const scrollTop = currentModalBody ? currentModalBody.scrollTop : 0;
           updateProviderModalDraftFromForm();
           providerModal.models.splice(Number(button.getAttribute('data-model-index')), 1);
           render();
-        }
-        if (action === 'provider-model-batch-toggle') {
-          updateProviderModalDraftFromForm();
-          providerBatchOpen = !providerBatchOpen;
-          render();
-        }
-        if (action === 'provider-model-batch-apply') {
-          applyBatchModelIds();
+          const nextModalBody = document.querySelector('.provider-modal .modal-body');
+          if (nextModalBody) {
+            nextModalBody.scrollTop = scrollTop;
+          }
         }
         if (action === 'model-candidate-apply') {
           applyModelCandidate(button);
@@ -1698,9 +1684,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 '</div></div>' +
                 '<div class="model-ledger-actions">' +
                   '<button type="button" class="secondary" data-action="provider-model-add">添加模型</button>' +
-                  '<button type="button" class="ghost" data-action="provider-model-batch-toggle">' + (providerBatchOpen ? '收起批量编辑' : '批量编辑模型 ID') + '</button>' +
                 '</div>' +
-                (providerBatchOpen ? renderModelBatchEditor(selected.models) : '') +
                 renderProviderModelLedger(selected.models) +
               '</div>' +
             '</div>' +
@@ -1749,14 +1733,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
           '<div id="' + menuId + '" class="model-candidate-menu" role="listbox" aria-label="' + attr(modelParameterFieldLabel(fieldName) + '候选') + '" data-model-candidate-menu="' + attr(fieldName) + '" data-model-index="' + index + '" hidden>' +
             renderModelCandidateOptions(model, index, fieldName) +
           '</div>' +
-        '</div>';
-      }
-
-      function renderModelBatchEditor(models) {
-        return '<div class="model-batch">' +
-          '<span class="muted small">每行一个模型 ID。应用后按 ID 保留已有参数，新增模型的参数保持空白。</span>' +
-          '<textarea id="providerModelBatchIds" placeholder="glm-5.3&#10;deepseek-v4-pro">' + h((models || []).map(function (model) { return model.id; }).join('\\n')) + '</textarea>' +
-          '<div class="model-batch-actions"><button type="button" class="secondary" data-action="provider-model-batch-apply">应用模型 ID</button></div>' +
         '</div>';
       }
 
@@ -1898,12 +1874,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         if (provider && provider.models.length === 0) {
           notices += '<div class="notice">该 Provider 还没有模型列表，请先回到 Providers 添加模型。</div>';
         }
-        const mainModelConfig = findProviderModelConfig(provider, selectedModels.ANTHROPIC_MODEL || firstConfiguredClaudeModel(selectedModels));
-        const mainLimits = mainModelConfig ? calculateModelLimitsClient(mainModelConfig) : {};
-        if (mainLimits.compactAtTokens !== undefined && (mainLimits.compactAtTokens < 100000 || mainLimits.compactAtTokens > 1000000)) {
-          disabled = true;
-          notices += '<div class="notice">Claude autoCompactWindow 当前换算为 ' + h(formatInteger(mainLimits.compactAtTokens)) + '，必须在 100,000-1,000,000 之间。请调整主模型上下文或压缩阈值。</div>';
-        }
 
         return '<section class="agent-panel">' +
           renderConfigPath('claude', 'Claude settings.json', agent) +
@@ -1919,7 +1889,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
             }).join('') + '</div>' +
             '<h3 class="section-title">运行设置</h3>' +
             '<div class="runtime-grid">' +
-              fieldWithHelp('自动压缩比例覆盖 %', '写入 CLAUDE_AUTOCOMPACT_PCT_OVERRIDE。留空表示不由插件设置。', '<input id="claudeAutoCompactPctOverride" data-claude-runtime-setting="autoCompactPctOverride" type="number" min="1" max="99" step="1" value="' + attr(runtimeSettings.autoCompactPctOverride || '') + '" placeholder="不设置">') +
+              fieldWithHelp('自动压缩比例覆盖 %', '所选模型配置了压缩阈值时优先写入模型值；模型未配置时，此处作为 CLAUDE_AUTOCOMPACT_PCT_OVERRIDE 的手动兜底。', '<input id="claudeAutoCompactPctOverride" data-claude-runtime-setting="autoCompactPctOverride" type="number" min="1" max="99" step="1" value="' + attr(runtimeSettings.autoCompactPctOverride || '') + '" placeholder="不设置">') +
               runtimeModeField('claudeAttributionHeader', 'Attribution Header', runtimeSettings.attributionHeader, 'CLAUDE_CODE_ATTRIBUTION_HEADER') +
               runtimeModeField('claudeDisableNonessentialTraffic', '非必要流量', runtimeSettings.disableNonessentialTraffic, 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', [
                 ['unset', '不设置'],
@@ -2030,7 +2000,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         providerModal = existing ? copyProvider(existing) : emptyProvider();
         modelPicker = null;
         modelFetchBusy = false;
-        providerBatchOpen = false;
         modelSuggestions = {};
         suggestionRequests = {};
         render();
@@ -2248,22 +2217,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         updateModelRowWarning(index);
       }
 
-      function applyBatchModelIds() {
-        updateProviderModalDraftFromForm();
-        const ids = parseModelIds(value('providerModelBatchIds'));
-        const currentById = {};
-        (providerModal.models || []).forEach(function (model) {
-          if (model.id) {
-            currentById[model.id] = model;
-          }
-        });
-        providerModal.models = ids.map(function (id) {
-          return currentById[id] || { id: id };
-        });
-        providerBatchOpen = false;
-        render();
-      }
-
       function fetchProviderModelsFromModal() {
         if (!providerModal || modelFetchBusy) {
           return;
@@ -2477,10 +2430,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
           }
         }
         return '';
-      }
-
-      function parseModelIds(text) {
-        return normalizeModels(String(text || '').split(/[\\n,]+/).map(function (item) { return item.trim(); }).filter(Boolean));
       }
 
       function dedupeModels(models) {
@@ -2744,15 +2693,18 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return '';
         }
         const modelConfig = findProviderModelConfig(provider, selectedModels.ANTHROPIC_MODEL || firstConfiguredClaudeModel(selectedModels));
-        const limits = modelConfig ? calculateModelLimitsClient(modelConfig) : {};
+        const compactThresholdPercent = modelConfig && modelConfig.compactThresholdPercent !== undefined
+          ? modelConfig.compactThresholdPercent
+          : runtimeSettings.autoCompactPctOverride;
         const rows = [
           managedPreviewRow(agent, 'env.ANTHROPIC_BASE_URL', agent.baseUrl, provider.claudeBaseUrl),
           managedPreviewRow(agent, 'env.ANTHROPIC_AUTH_TOKEN', agent.authToken, provider.apiKey)
         ].concat(claudeKeys.map(function (key) {
           return managedPreviewRow(agent, 'env.' + key, agent.models[key], selectedModels[key]);
         })).concat([
-          managedPreviewRow(agent, 'autoCompactWindow', agent.autoCompactWindow, limits.compactAtTokens),
-          managedPreviewRow(agent, 'env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', agent.runtimeSettings.autoCompactPctOverride, runtimeSettings.autoCompactPctOverride),
+          preservedPreviewRow('env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', agent.autoCompactWindow, modelConfig && modelConfig.contextWindow),
+          preservedPreviewRow('env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', agent.runtimeSettings.autoCompactPctOverride, compactThresholdPercent),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_MAX_OUTPUT_TOKENS', agent.maxOutputTokens, modelConfig && modelConfig.maxOutputTokens),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_ATTRIBUTION_HEADER', claudeModeValue(agent.runtimeSettings.attributionHeader, '1', '0'), claudeModeValue(runtimeSettings.attributionHeader, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', claudeModeValue(agent.runtimeSettings.disableNonessentialTraffic, '1', '0'), claudeModeValue(runtimeSettings.disableNonessentialTraffic, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', claudeModeValue(agent.runtimeSettings.experimentalAgentTeams, '1', '0'), claudeModeValue(runtimeSettings.experimentalAgentTeams, '1', '0')),
@@ -2798,10 +2750,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const hasCurrentBlock = agent.providerKey === provider.key;
         const currentModel = agent.providerKey && agent.model ? agent.providerKey + '/' + agent.model : agent.model;
         const nextModel = selectedModel ? provider.key + '/' + selectedModel : '';
-        const configuredModels = provider.models.filter(function (model) { return Boolean(model.contextWindow || model.maxOutputTokens); });
         const selectedConfig = findProviderModelConfig(provider, selectedModel);
         const limits = selectedConfig ? calculateModelLimitsClient(selectedConfig) : {};
-        const nextModelCount = configuredModels.length;
+        const nextModelCount = provider.models.length;
         const rows = [
           managedPreviewRow(agent, 'model', currentModel, nextModel),
           managedPreviewRow(agent, providerKey + '.npm', hasCurrentBlock ? agent.providerNpm : undefined, provider.opencodeNpm),
@@ -2859,6 +2810,16 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         const managed = Boolean(agent && agent.managedPaths && agent.managedPaths.indexOf(path) >= 0);
         return [displayKey || path, current, managed ? '未配置' : current, managed && current !== '未配置' ? '删除' : '保持不变'];
+      }
+
+      function preservedPreviewRow(path, currentValue, desiredValue) {
+        if (desiredValue !== undefined && desiredValue !== null && desiredValue !== '') {
+          const current = valueLabel(currentValue);
+          const next = valueLabel(desiredValue);
+          return [path, current, next, current === next ? '保持不变' : '写入'];
+        }
+        const current = valueLabel(currentValue);
+        return [path, current, current, '保持不变'];
       }
 
       function claudeModeValue(mode, enabledValue, disabledValue) {

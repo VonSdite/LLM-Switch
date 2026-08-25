@@ -78,17 +78,21 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
     || CLAUDE_MODEL_KEYS.map((key) => payload.models[key]?.trim()).find(Boolean)
     || '';
   const modelConfig = mainModel ? findProviderModel(provider, mainModel) : undefined;
-  const compactAtTokens = modelConfig ? calculateModelLimits(modelConfig).compactAtTokens : undefined;
-  if (compactAtTokens !== undefined) {
-    if (compactAtTokens < 100_000 || compactAtTokens > 1_000_000) {
-      throw new Error(`Claude autoCompactWindow 必须在 100000-1000000 之间；模型 ${modelConfig?.id} 当前换算为 ${compactAtTokens}。`);
-    }
-    desired.push(managedField(['autoCompactWindow'], compactAtTokens));
-  }
-
   const runtimeSettings = normalizeClaudeRuntimeSettings(payload.runtimeSettings);
-  if (runtimeSettings.autoCompactPctOverride !== undefined) {
-    desired.push(managedField(['env', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE'], String(runtimeSettings.autoCompactPctOverride)));
+  const compactThresholdPercent = modelConfig?.compactThresholdPercent ?? runtimeSettings.autoCompactPctOverride;
+  const preservedPaths = new Set<string>();
+  if (modelConfig?.contextWindow) {
+    desired.push(managedField(['env', 'CLAUDE_CODE_AUTO_COMPACT_WINDOW'], String(modelConfig.contextWindow)));
+  } else {
+    preservedPaths.add(JSON.stringify(['env', 'CLAUDE_CODE_AUTO_COMPACT_WINDOW']));
+  }
+  if (compactThresholdPercent !== undefined) {
+    desired.push(managedField(['env', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE'], String(compactThresholdPercent)));
+  } else {
+    preservedPaths.add(JSON.stringify(['env', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE']));
+  }
+  if (modelConfig?.maxOutputTokens) {
+    desired.push(managedField(['env', 'CLAUDE_CODE_MAX_OUTPUT_TOKENS'], String(modelConfig.maxOutputTokens)));
   }
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_ATTRIBUTION_HEADER'], runtimeSettings.attributionHeader, '1', '0');
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'], runtimeSettings.disableNonessentialTraffic, '1', '0');
@@ -97,7 +101,8 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
   pushClaudeModeField(desired, ['env', 'IS_SANDBOX'], runtimeSettings.sandbox, '1', '0');
 
   const targetId = managedTargetId('claude', filePath);
-  reconcileManagedFields(config, await readManagedFields(context, targetId), desired);
+  const previous = await readManagedFields(context, targetId);
+  reconcileManagedFields(config, previous.filter((field) => !preservedPaths.has(JSON.stringify(field.path))), desired);
 
   await writeText(filePath, `${JSON.stringify(config, null, 2)}\n`);
   await updateManagedFields(context, [{ targetId, fields: desired }]);
@@ -192,13 +197,13 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     if (configuredModel.maxOutputTokens) {
       limit.output = configuredModel.maxOutputTokens;
     }
-    if (Object.keys(limit).length === 0) {
-      continue;
+    const modelDefinition: { name: string; limit?: typeof limit } = {
+      name: configuredModel.id
+    };
+    if (Object.keys(limit).length > 0) {
+      modelDefinition.limit = limit;
     }
-    desired.push(managedField(['provider', provider.key, 'models', configuredModel.id], {
-      name: configuredModel.id,
-      limit
-    }));
+    desired.push(managedField(['provider', provider.key, 'models', configuredModel.id], modelDefinition));
   }
 
   const targetId = managedTargetId('opencode', filePath);
@@ -222,6 +227,7 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
     hasAuthToken: false,
     models: emptyClaudeModels(),
     autoCompactWindow: null,
+    maxOutputTokens: null,
     runtimeSettings: emptyClaudeRuntimeSettings()
   };
 
@@ -241,7 +247,8 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
       models: Object.fromEntries(
         CLAUDE_MODEL_KEYS.map((key) => [key, stringValue(env[key])])
       ) as ClaudeAgentState['models'],
-      autoCompactWindow: numberOrNull(config.autoCompactWindow),
+      autoCompactWindow: positiveIntegerOrUndefined(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW) ?? null,
+      maxOutputTokens: positiveIntegerOrUndefined(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) ?? null,
       runtimeSettings: {
         autoCompactPctOverride: positiveIntegerOrUndefined(env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE),
         attributionHeader: claudeModeFromValue(env.CLAUDE_CODE_ATTRIBUTION_HEADER, '1', '0'),

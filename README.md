@@ -101,7 +101,9 @@ Claude 页面会写入 `settings.json` 的 `env`：
 - `ANTHROPIC_DEFAULT_SONNET_MODEL`
 - `ANTHROPIC_MODEL`
 - `ANTHROPIC_REASONING_MODEL`
+- `CLAUDE_CODE_AUTO_COMPACT_WINDOW`（模型配置上下文窗口时写入）
 - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`（可选）
+- `CLAUDE_CODE_MAX_OUTPUT_TOKENS`（模型配置最大输出时写入）
 - `CLAUDE_CODE_ATTRIBUTION_HEADER`（可选）
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`（可选）
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`（可选）
@@ -109,13 +111,7 @@ Claude 页面会写入 `settings.json` 的 `env`：
 
 每个 Provider 模型在 Claude 下拉框和快速切换中显示普通版和 `[1M]` 版。`[1M]` 选项实际写入 `model-id[1m]`，由用户按上游模型能力选择。
 
-Claude 在主模型的上下文窗口和压缩阈值都已填写时，计算并写入顶层 `autoCompactWindow`：
-
-```text
-autoCompactWindow = floor(contextWindow × compactThresholdPercent / 100)
-```
-
-Claude Code 接受 `100000-1000000` 的 `autoCompactWindow`。换算结果超出范围时，插件显示错误并停止保存。Claude 的最大输出参数保存在 Provider 中，用于其他客户端；Claude 配置不接收该字段。
+Claude 使用主模型的参数更新 env。上下文窗口写入 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，压缩阈值写入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，最大输出写入 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。模型未配置上下文窗口或压缩阈值时保留配置文件当前值；模型未配置最大输出时清理插件此前下发且未被手动修改的最大输出值。
 
 运行设置使用“未设置 / 启用 / 禁用”三态选择，配置中缺少对应字段时默认选择“不设置”。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
 
@@ -169,7 +165,7 @@ opencode 使用以下换算：
 compaction.reserved = contextWindow - floor(contextWindow × compactThresholdPercent / 100)
 ```
 
-opencode 按需写入模型参数。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时不下发该模型的 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时不下发压缩配置。
+opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时仍写入模型 ID，但不生成 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时不下发压缩配置。
 
 ## 快速切换模型
 

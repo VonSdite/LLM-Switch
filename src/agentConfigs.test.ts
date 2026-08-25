@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import Module from 'node:module';
 import test from 'node:test';
 import * as TOML from '@iarna/toml';
-import { ProviderConfig, SaveClaudePayload, SaveCodexPayload } from './types';
+import { CLAUDE_MODEL_KEYS, ProviderConfig, SaveClaudePayload, SaveCodexPayload } from './types';
 
 interface FakeUri {
   fsPath: string;
@@ -89,9 +89,11 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
 
     const claude = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
     const claudeEnv = claude.env as Record<string, unknown>;
-    assert.equal(claude.autoCompactWindow, 838_860);
+    assert.equal(claude.autoCompactWindow, undefined);
     assert.equal(claudeEnv.ANTHROPIC_MODEL, 'glm-5.3[1m]');
-    assert.equal(claudeEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '95');
+    assert.equal(claudeEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
+    assert.equal(claudeEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
+    assert.equal(claudeEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '131072');
     assert.equal(claudeEnv.CLAUDE_CODE_ATTRIBUTION_HEADER, '0');
     assert.equal(claudeEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
     assert.equal(claudeEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
@@ -115,6 +117,9 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(codex.sandbox_mode, 'workspace-write');
     assert.equal(codex.approval_policy, 'on-request');
     const agents = await agentConfigs.readAgentsState(context, [provider]);
+    assert.equal(agents.claude.autoCompactWindow, 1_048_576);
+    assert.equal(agents.claude.runtimeSettings.autoCompactPctOverride, 80);
+    assert.equal(agents.claude.maxOutputTokens, 131_072);
     assert.deepEqual(agents.codex.runtimeSettings, codexPayload.runtimeSettings);
     const codexProviders = codex.model_providers as Record<string, Record<string, unknown>>;
     assert.equal(codexProviders['provider-one'].requires_openai_auth, true);
@@ -184,7 +189,10 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
       model: 'glm-5.3'
     });
     const claudeWithoutCompact = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
-    assert.equal(claudeWithoutCompact.autoCompactWindow, undefined);
+    const claudeWithoutCompactEnv = claudeWithoutCompact.env as Record<string, unknown>;
+    assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
+    assert.equal(claudeWithoutCompactEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
+    assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '131072');
     const codexWithoutCompact = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     assert.equal(codexWithoutCompact.model_context_window, 1_048_576);
     assert.equal(codexWithoutCompact.model_auto_compact_token_limit, undefined);
@@ -218,14 +226,31 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
       ...providerWithoutKey,
       models: [{ id: 'context-only' }]
     };
+    await agentConfigs.saveClaudeConfig(context, [providerWithoutLimits], {
+      ...claudePayload,
+      models: Object.fromEntries(CLAUDE_MODEL_KEYS.map((key) => [key, 'context-only'])) as SaveClaudePayload['models'],
+      runtimeSettings: {
+        attributionHeader: 'unset',
+        disableNonessentialTraffic: 'unset',
+        experimentalAgentTeams: 'unset',
+        enableToolSearch: 'unset',
+        sandbox: 'unset'
+      }
+    });
+    const claudeWithoutLimits = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
+    const claudeWithoutLimitsEnv = claudeWithoutLimits.env as Record<string, unknown>;
+    assert.equal(claudeWithoutLimitsEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
+    assert.equal(claudeWithoutLimitsEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
+    assert.equal(claudeWithoutLimitsEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, undefined);
     await agentConfigs.saveOpencodeConfig(context, [providerWithoutLimits], {
       providerId: provider.id,
       model: 'context-only'
     });
     const opencodeWithoutLimits = JSON.parse(await fs.readFile(opencodePath, 'utf8')) as Record<string, unknown>;
     const providerWithoutLimitsConfig = (opencodeWithoutLimits.provider as Record<string, Record<string, unknown>>)['provider-one'];
+    const modelsWithoutLimits = providerWithoutLimitsConfig.models as Record<string, unknown>;
     assert.equal(opencodeWithoutLimits.model, 'provider-one/context-only');
-    assert.equal(providerWithoutLimitsConfig.models, undefined);
+    assert.deepEqual(modelsWithoutLimits['context-only'], { name: 'context-only' });
     assert.equal(opencodeWithoutLimits.compaction, undefined);
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });

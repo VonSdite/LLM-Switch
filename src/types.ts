@@ -73,6 +73,7 @@ export interface ClaudeAgentState extends AgentConfigFileState {
   hasAuthToken: boolean;
   models: Record<ClaudeModelKey, string>;
   autoCompactWindow: number | null;
+  maxOutputTokens: number | null;
   runtimeSettings: ClaudeRuntimeSettings;
 }
 
