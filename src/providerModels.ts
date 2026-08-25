@@ -1,4 +1,4 @@
-import { baseClaudeModelId } from './modelPresets';
+import { DEFAULT_COMPACT_THRESHOLD_PERCENT, DEFAULT_FETCHED_CONTEXT_WINDOW, baseClaudeModelId, getModelParameterSuggestions } from './modelPresets';
 import { ProviderConfig, ProviderModelConfig } from './types';
 
 export function findProviderModel(provider: ProviderConfig, modelId: string): ProviderModelConfig | undefined {
@@ -65,7 +65,7 @@ export function mergeFetchedModels(existing: ProviderModelConfig[], fetchedIds: 
   const byId = new Map(existing.map((model) => [model.id, model]));
   for (const id of fetchedIds.map((value) => value.trim()).filter(Boolean)) {
     if (!byId.has(id)) {
-      byId.set(id, { id });
+      byId.set(id, defaultFetchedModelConfig(id));
     }
   }
   return normalizeProviderModels(Array.from(byId.values()));
@@ -95,6 +95,18 @@ function optionalPositiveInteger(value: unknown, label: string, strict: boolean)
     return undefined;
   }
   return number;
+}
+
+export function defaultFetchedModelConfig(id: string): ProviderModelConfig {
+  const suggestions = getModelParameterSuggestions(id);
+  const suggestedContextWindow = suggestions.matchKind === 'fallback'
+    ? DEFAULT_FETCHED_CONTEXT_WINDOW
+    : suggestions.contextWindow[0]?.value;
+  return {
+    id,
+    contextWindow: suggestedContextWindow ?? DEFAULT_FETCHED_CONTEXT_WINDOW,
+    compactThresholdPercent: DEFAULT_COMPACT_THRESHOLD_PERCENT
+  };
 }
 
 function stringValue(value: unknown): string {

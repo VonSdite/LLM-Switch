@@ -13,6 +13,7 @@ LLM-Switch 是一个 VS Code 插件，用于统一管理 AI Provider，并把 Pr
 - 保存 Agent 配置前自动备份旧配置文件，最多保留 5 份。
 - 提供 VS Code 命令快速打开配置文件。
 - 提供 VS Code 命令快速切换 Claude、Codex、opencode 模型。
+- 提供 VS Code 命令单独设置 Claude、Codex、opencode effort。
 
 ## Provider 管理
 
@@ -37,18 +38,18 @@ Provider 字段：
 - `校验证书`：仅用于拉取模型，默认不勾选。
 - `模型 ID`：模型的原始 ID，保存时去重并排序。
 - `上下文窗口`：正整数，可留空。
-- `压缩阈值`：可留空；填写时使用 1-99 的整数百分比。
+- `压缩阈值`：默认 `60`；填写时使用 1-99 的整数百分比。
 - `最大输出`：正整数，可留空；填写时小于或等于上下文窗口。
 
 模型参数采用紧凑台账编辑。输入模型 ID 后，插件按“精确 ID、忽略大小写、Provider 前缀、`[1m]` 后缀、明确别名、日期快照”的顺序识别内置参数。聚焦上下文窗口、压缩阈值或最大输出输入框时显示对应候选列表，选择候选后才会写入表单。
 
 内置候选覆盖智谱 GLM、DeepSeek、通义千问、MiniMax 和 Codex/OpenAI 相关模型。未识别模型会显示以下通用候选：
 
-- 上下文窗口：`128000`
-- 压缩阈值：`80%` 候选
+- 上下文窗口：`200000`
+- 压缩阈值：`60`
 - 最大输出：`32000`
 
-新增和拉取的模型只填入模型 ID，其余参数保持空白。用户点击候选或手动输入后，参数才会保存。当压缩阈值后的预留空间小于最大输出时，界面显示提示并允许保存。该提示用于说明客户端可能提前压缩。
+新增模型默认填入压缩阈值 `60`。拉取模型时，插件为启发式识别到的模型带入对应上下文窗口；未识别模型默认使用上下文窗口 `200000`；压缩阈值默认填入 `60`。用户点击候选或手动输入后会覆盖默认值。当压缩阈值后的预留空间小于最大输出时，界面显示提示并允许保存。该提示用于说明客户端可能提前压缩。
 
 ### 拉取模型
 
@@ -65,7 +66,7 @@ Provider 弹窗中的 `拉取模型` 会从当前填写的 API 地址推导基�
 - 自定义代理模式会通过填写的代理地址请求；连接代理服务器本身时也会绕过 Node 全局代理。
 - 勾选 `校验证书` 后会校验拉取模型请求中的 SSL 证书；默认不校验。
 - 拉取结果会弹出模型选择窗口，可搜索、勾选、取消勾选。
-- 确认后按模型 ID 合并当前清单；已有模型保留参数，新模型的参数保持空白。
+- 确认后按模型 ID 合并当前清单；已有模型保留参数，新模型按识别结果或默认值补入上下文窗口和压缩阈值。
 
 ## Agents 管理
 
@@ -102,18 +103,22 @@ Claude 页面会写入 `settings.json` 的 `env`：
 - `ANTHROPIC_MODEL`
 - `ANTHROPIC_REASONING_MODEL`
 - `CLAUDE_CODE_AUTO_COMPACT_WINDOW`（模型配置上下文窗口时写入）
-- `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`（可选）
+- `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`（模型配置压缩阈值时写入）
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS`（模型配置最大输出时写入）
 - `CLAUDE_CODE_ATTRIBUTION_HEADER`（可选）
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`（可选）
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`（可选）
 - `ENABLE_TOOL_SEARCH`（可选）
 
+Claude 页面还会写入 `settings.json` 顶层字段：
+
+- `effortLevel`（可选）
+
 每个 Provider 模型在 Claude 下拉框和快速切换中显示普通版和 `[1M]` 版。`[1M]` 选项实际写入 `model-id[1m]`，由用户按上游模型能力选择。
 
-Claude 使用主模型的参数更新 env。上下文窗口写入 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，压缩阈值写入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，最大输出写入 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。模型未配置上下文窗口或压缩阈值时保留配置文件当前值；模型未配置最大输出时清理插件此前下发且未被手动修改的最大输出值。
+Claude 使用主模型的参数更新 env。上下文窗口写入 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，压缩阈值写入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，最大输出写入 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。模型未配置上下文窗口、压缩阈值或最大输出时，插件清理对应配置。
 
-运行设置使用“未设置 / 启用 / 禁用”三态选择，配置中缺少对应字段时默认选择“不设置”。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
+运行设置使用“不设置 / 启用 / 禁用”或“不设置 / effort 值”选择，配置中缺少对应字段时默认选择“不设置”。`effortLevel` 支持 `low`、`medium`、`high`、`xhigh`。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
 
 ### Codex
 
@@ -129,6 +134,7 @@ Codex 页面会写入 `config.toml`：
 - `model_context_window`
 - `model_auto_compact_token_limit`
 - `service_tier`
+- `model_reasoning_effort`
 - `sandbox_mode`
 - `approval_policy`
 
@@ -139,9 +145,9 @@ Codex 页面还会写入 `auth.json`：
 Codex 的 `model_provider` 和 `[model_providers.<provider>]` 使用 Provider 名称。
 Provider 配置了 API key 时，`requires_openai_auth` 写入 `true`；API key 为空时写入 `false`，并清理 `auth.json` 中的 `OPENAI_API_KEY`。
 
-Codex 使用所选模型的上下文窗口。上下文窗口和压缩阈值都已填写时，插件计算 `model_auto_compact_token_limit`；未选择压缩阈值时，插件清理自己管理的自动压缩字段。
+Codex 使用所选模型的上下文窗口。上下文窗口和压缩阈值都已填写时，插件计算 `model_auto_compact_token_limit`；模型未配置上下文窗口时，插件写入 `model_context_window = 372000` 和 `model_auto_compact_token_limit = 350000`。Codex 不写入最大输出窗口配置。
 
-Codex 运行设置默认选择“不设置”。`service_tier` 支持 `auto`、`default`、`flex`、`priority`；`sandbox_mode` 支持 `read-only`、`workspace-write`、`danger-full-access`；`approval_policy` 支持 `untrusted`、`on-request`、`never`。
+Codex 运行设置默认选择“不设置”。`service_tier` 支持 `auto`、`default`、`flex`、`priority`；`model_reasoning_effort` 支持 `minimal`、`low`、`medium`、`high`、`xhigh`；`sandbox_mode` 支持 `read-only`、`workspace-write`、`danger-full-access`；`approval_policy` 支持 `untrusted`、`on-request`、`never`。
 
 ### opencode
 
@@ -155,6 +161,7 @@ opencode 页面会写入 `opencode.json`：
 - `provider.<provider>.models`
 - `provider.<provider>.models.<model>.limit.context`
 - `provider.<provider>.models.<model>.limit.output`
+- `provider.<provider>.models.<model>.options.reasoningEffort`
 - `compaction.reserved`
 
 opencode 的 `npm` 值来自 Provider 中配置的 `opencode npm`。
@@ -165,7 +172,7 @@ opencode 使用以下换算：
 compaction.reserved = contextWindow - floor(contextWindow × compactThresholdPercent / 100)
 ```
 
-opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时仍写入模型 ID，但不生成 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时不下发压缩配置。
+opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时仍写入模型 ID，但不生成 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时清理压缩配置。所选模型的 `reasoningEffort` 支持 `minimal`、`low`、`medium`、`high`、`xhigh`。
 
 ## 快速切换模型
 
@@ -173,7 +180,7 @@ opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。�
 
 - `LLM-Switch: Quick Switch Claude Model`
 - `LLM-Switch: Quick Switch Codex Model`
-- `LLM-Switch: Quick Switch opencode Model`
+- `LLM-Switch: Quick Switch Opencode Model`
 
 快速切换行为：
 
@@ -184,8 +191,9 @@ opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。�
 - Claude 如果多个模型环境变量不一致，会提示当前模型不一致，并显示各模型出现次数。
 - 选择 Claude 模型后，会把 5 个 Claude 模型环境变量统一切换到所选模型。
 - Claude 候选包含普通版和 `[1M]` 版。
-- 选择 Codex 模型后，会修改 Codex `model_provider`、`model`、`model_providers` 和 `auth.json`。
-- 选择 opencode 模型后，会修改 opencode `model` 和对应 Provider 配置。
+- 选择 Claude、Codex 或 opencode 模型后，会继续选择 effort；取消 effort 选择会停止本次切换。
+- 选择 Codex 模型后，会修改 Codex `model_provider`、`model`、`model_providers`、`model_reasoning_effort` 和 `auth.json`。
+- 选择 opencode 模型后，会修改 opencode `model`、所选模型的 `options.reasoningEffort` 和对应 Provider 配置。
 
 ## 配置备份
 
@@ -208,10 +216,13 @@ opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。�
 | `LLM-Switch: Open Manager` | `llm-switch.openManager` | 打开 LLM-Switch 管理页面。 |
 | `LLM-Switch: Open Claude Config` | `llm-switch.openClaudeConfig` | 打开 Claude 配置文件。 |
 | `LLM-Switch: Open Codex Config` | `llm-switch.openCodexConfig` | 分栏打开 Codex `config.toml` 和 `auth.json`。 |
-| `LLM-Switch: Open opencode Config` | `llm-switch.openOpencodeConfig` | 打开 opencode 配置文件。 |
+| `LLM-Switch: Open Opencode Config` | `llm-switch.openOpencodeConfig` | 打开 opencode 配置文件。 |
 | `LLM-Switch: Quick Switch Claude Model` | `llm-switch.quickSwitchClaudeModel` | 快速选择 Provider 模型并应用到 Claude。 |
 | `LLM-Switch: Quick Switch Codex Model` | `llm-switch.quickSwitchCodexModel` | 快速选择 Provider 模型并应用到 Codex。 |
-| `LLM-Switch: Quick Switch opencode Model` | `llm-switch.quickSwitchOpencodeModel` | 快速选择 Provider 模型并应用到 opencode。 |
+| `LLM-Switch: Quick Switch Opencode Model` | `llm-switch.quickSwitchOpencodeModel` | 快速选择 Provider 模型并应用到 opencode。 |
+| `LLM-Switch: Set Claude Effort` | `llm-switch.setClaudeEffort` | 设置 Claude `effortLevel`。 |
+| `LLM-Switch: Set Codex Effort` | `llm-switch.setCodexEffort` | 设置 Codex `model_reasoning_effort`。 |
+| `LLM-Switch: Set Opencode Effort` | `llm-switch.setOpencodeEffort` | 设置 opencode 所选模型的 `options.reasoningEffort`。 |
 
 ## 存储位置
 

@@ -2,6 +2,12 @@ export type AgentName = 'claude' | 'codex' | 'opencode';
 export type ProxyMode = 'direct' | 'system' | 'custom';
 export type CodexWireApi = 'responses' | 'chat';
 
+export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+export type ClaudeEffortLevel = typeof CLAUDE_EFFORT_LEVELS[number];
+
+export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+export type ReasoningEffort = typeof REASONING_EFFORTS[number];
+
 export const CLAUDE_MODEL_KEYS = [
   'ANTHROPIC_DEFAULT_HAIKU_MODEL',
   'ANTHROPIC_DEFAULT_OPUS_MODEL',
@@ -23,6 +29,7 @@ export type ClaudeSettingMode = 'unset' | 'enabled' | 'disabled';
 
 export interface ClaudeRuntimeSettings {
   autoCompactPctOverride?: number;
+  effortLevel?: ClaudeEffortLevel;
   attributionHeader: ClaudeSettingMode;
   disableNonessentialTraffic: ClaudeSettingMode;
   experimentalAgentTeams: ClaudeSettingMode;
@@ -36,8 +43,13 @@ export type CodexApprovalPolicy = 'untrusted' | 'on-request' | 'never';
 
 export interface CodexRuntimeSettings {
   serviceTier?: CodexServiceTier;
+  modelReasoningEffort?: ReasoningEffort;
   sandboxMode?: CodexSandboxMode;
   approvalPolicy?: CodexApprovalPolicy;
+}
+
+export interface OpencodeRuntimeSettings {
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface ProviderConfig {
@@ -106,6 +118,7 @@ export interface OpencodeAgentState extends AgentConfigFileState {
   modelContextWindow: number | null;
   maxOutputTokens: number | null;
   compactionReserved: number | null;
+  runtimeSettings: OpencodeRuntimeSettings;
 }
 
 export interface AgentsState {
@@ -134,4 +147,5 @@ export interface SaveCodexPayload {
 export interface SaveOpencodePayload {
   providerId: string;
   model: string;
+  runtimeSettings?: OpencodeRuntimeSettings;
 }

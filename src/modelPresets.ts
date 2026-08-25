@@ -138,8 +138,11 @@ const PRESETS: PresetEntry[] = [
   }
 ];
 
-const DEFAULT_CONTEXT = fallback(128_000, '通用上下文 128,000');
-const COMPACT_CANDIDATE = fallback(80, '建议压缩阈值 80%');
+export const DEFAULT_FETCHED_CONTEXT_WINDOW = 200_000;
+export const DEFAULT_COMPACT_THRESHOLD_PERCENT = 60;
+
+const DEFAULT_CONTEXT = fallback(DEFAULT_FETCHED_CONTEXT_WINDOW, '通用上下文 200000');
+const COMPACT_CANDIDATE = fallback(DEFAULT_COMPACT_THRESHOLD_PERCENT, '建议压缩阈值 60');
 const DEFAULT_OUTPUT = fallback(32_000, '通用最大输出 32,000');
 
 export function getModelParameterSuggestions(modelId: string): ModelParameterSuggestions {

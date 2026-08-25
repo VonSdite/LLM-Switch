@@ -2,7 +2,7 @@
   "name": "llm-switch",
   "displayName": "LLM-Switch",
   "description": "Unified AI provider and agent model configuration manager for Claude, Codex, and opencode.",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "publisher": "VonSdite",
   "license": "MIT",
   "icon": "icon.png",
@@ -27,7 +27,10 @@
     "onCommand:llm-switch.openOpencodeConfig",
     "onCommand:llm-switch.quickSwitchClaudeModel",
     "onCommand:llm-switch.quickSwitchCodexModel",
-    "onCommand:llm-switch.quickSwitchOpencodeModel"
+    "onCommand:llm-switch.quickSwitchOpencodeModel",
+    "onCommand:llm-switch.setClaudeEffort",
+    "onCommand:llm-switch.setCodexEffort",
+    "onCommand:llm-switch.setOpencodeEffort"
   ],
   "main": "./dist/extension.js",
   "scripts": {
@@ -52,7 +55,7 @@
       },
       {
         "command": "llm-switch.openOpencodeConfig",
-        "title": "LLM-Switch: Open opencode Config"
+        "title": "LLM-Switch: Open Opencode Config"
       },
       {
         "command": "llm-switch.quickSwitchClaudeModel",
@@ -64,7 +67,19 @@
       },
       {
         "command": "llm-switch.quickSwitchOpencodeModel",
-        "title": "LLM-Switch: Quick Switch opencode Model"
+        "title": "LLM-Switch: Quick Switch Opencode Model"
+      },
+      {
+        "command": "llm-switch.setClaudeEffort",
+        "title": "LLM-Switch: Set Claude Effort"
+      },
+      {
+        "command": "llm-switch.setCodexEffort",
+        "title": "LLM-Switch: Set Codex Effort"
+      },
+      {
+        "command": "llm-switch.setOpencodeEffort",
+        "title": "LLM-Switch: Set Opencode Effort"
       }
     ]
   },

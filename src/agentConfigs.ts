@@ -9,8 +9,10 @@ import { calculateModelLimits } from './modelPresets';
 import { findProvider, findProviderModel } from './providerStore';
 import {
   AgentsState,
+  CLAUDE_EFFORT_LEVELS,
   CLAUDE_MODEL_KEYS,
   ClaudeAgentState,
+  ClaudeEffortLevel,
   ClaudeRuntimeSettings,
   ClaudeSettingMode,
   CodexAgentState,
@@ -18,8 +20,11 @@ import {
   CodexRuntimeSettings,
   CodexSandboxMode,
   CodexServiceTier,
+  OpencodeRuntimeSettings,
   OpencodeAgentState,
   ProviderConfig,
+  REASONING_EFFORTS,
+  ReasoningEffort,
   SaveClaudePayload,
   SaveCodexPayload,
   SaveOpencodePayload
@@ -27,6 +32,8 @@ import {
 
 type JsonObject = Record<string, unknown>;
 const MAX_BACKUP_FILES = 5;
+const CODEX_DEFAULT_MODEL_CONTEXT_WINDOW = 372_000;
+const CODEX_DEFAULT_MODEL_AUTO_COMPACT_TOKEN_LIMIT = 350_000;
 const CODEX_SERVICE_TIERS: readonly CodexServiceTier[] = ['auto', 'default', 'flex', 'priority'];
 const CODEX_SANDBOX_MODES: readonly CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
 const CODEX_APPROVAL_POLICIES: readonly CodexApprovalPolicy[] = ['untrusted', 'on-request', 'never'];
@@ -79,20 +86,25 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
     || '';
   const modelConfig = mainModel ? findProviderModel(provider, mainModel) : undefined;
   const runtimeSettings = normalizeClaudeRuntimeSettings(payload.runtimeSettings);
-  const compactThresholdPercent = modelConfig?.compactThresholdPercent ?? runtimeSettings.autoCompactPctOverride;
-  const preservedPaths = new Set<string>();
   if (modelConfig?.contextWindow) {
     desired.push(managedField(['env', 'CLAUDE_CODE_AUTO_COMPACT_WINDOW'], String(modelConfig.contextWindow)));
   } else {
-    preservedPaths.add(JSON.stringify(['env', 'CLAUDE_CODE_AUTO_COMPACT_WINDOW']));
+    delete objectValue(config.env).CLAUDE_CODE_AUTO_COMPACT_WINDOW;
   }
-  if (compactThresholdPercent !== undefined) {
-    desired.push(managedField(['env', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE'], String(compactThresholdPercent)));
+  if (modelConfig?.compactThresholdPercent !== undefined) {
+    desired.push(managedField(['env', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE'], String(modelConfig.compactThresholdPercent)));
   } else {
-    preservedPaths.add(JSON.stringify(['env', 'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE']));
+    delete objectValue(config.env).CLAUDE_AUTOCOMPACT_PCT_OVERRIDE;
   }
   if (modelConfig?.maxOutputTokens) {
     desired.push(managedField(['env', 'CLAUDE_CODE_MAX_OUTPUT_TOKENS'], String(modelConfig.maxOutputTokens)));
+  } else {
+    delete objectValue(config.env).CLAUDE_CODE_MAX_OUTPUT_TOKENS;
+  }
+  if (runtimeSettings.effortLevel) {
+    desired.push(managedField(['effortLevel'], runtimeSettings.effortLevel));
+  } else {
+    delete config.effortLevel;
   }
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_ATTRIBUTION_HEADER'], runtimeSettings.attributionHeader, '1', '0');
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'], runtimeSettings.disableNonessentialTraffic, '1', '0');
@@ -101,8 +113,7 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
   pushClaudeModeField(desired, ['env', 'IS_SANDBOX'], runtimeSettings.sandbox, '1', '0');
 
   const targetId = managedTargetId('claude', filePath);
-  const previous = await readManagedFields(context, targetId);
-  reconcileManagedFields(config, previous.filter((field) => !preservedPaths.has(JSON.stringify(field.path))), desired);
+  reconcileManagedFields(config, await readManagedFields(context, targetId), desired);
 
   await writeText(filePath, `${JSON.stringify(config, null, 2)}\n`);
   await updateManagedFields(context, [{ targetId, fields: desired }]);
@@ -136,11 +147,21 @@ export async function saveCodexConfig(context: vscode.ExtensionContext, provider
     const compactAtTokens = calculateModelLimits(modelConfig).compactAtTokens;
     if (compactAtTokens !== undefined) {
       configDesired.push(managedField(['model_auto_compact_token_limit'], compactAtTokens));
+    } else {
+      delete config.model_auto_compact_token_limit;
     }
+  } else {
+    configDesired.push(
+      managedField(['model_context_window'], CODEX_DEFAULT_MODEL_CONTEXT_WINDOW),
+      managedField(['model_auto_compact_token_limit'], CODEX_DEFAULT_MODEL_AUTO_COMPACT_TOKEN_LIMIT)
+    );
   }
   const runtimeSettings = normalizeCodexRuntimeSettings(payload.runtimeSettings);
   if (runtimeSettings.serviceTier) {
     configDesired.push(managedField(['service_tier'], runtimeSettings.serviceTier));
+  }
+  if (runtimeSettings.modelReasoningEffort) {
+    configDesired.push(managedField(['model_reasoning_effort'], runtimeSettings.modelReasoningEffort));
   }
   if (runtimeSettings.sandboxMode) {
     configDesired.push(managedField(['sandbox_mode'], runtimeSettings.sandboxMode));
@@ -172,6 +193,7 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     throw new Error('请选择 opencode 模型。');
   }
   const selectedModelConfig = findProviderModel(provider, model);
+  const runtimeSettings = normalizeOpencodeRuntimeSettings(payload.runtimeSettings);
 
   const filePath = await getAgentConfigPath(context, 'opencode');
   await requireExistingConfigFile(filePath);
@@ -189,6 +211,8 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
   const reserved = selectedModelConfig ? calculateModelLimits(selectedModelConfig).reserved : undefined;
   if (reserved !== undefined) {
     desired.push(managedField(['compaction', 'reserved'], reserved));
+  } else {
+    deleteOptionalPath(config, ['compaction', 'reserved']);
   }
   if (provider.apiKey) {
     desired.push(managedField(['provider', provider.key, 'options', 'apiKey'], provider.apiKey));
@@ -201,11 +225,14 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     if (configuredModel.maxOutputTokens) {
       limit.output = configuredModel.maxOutputTokens;
     }
-    const modelDefinition: { name: string; limit?: typeof limit } = {
+    const modelDefinition: { name: string; limit?: typeof limit; options?: { reasoningEffort?: ReasoningEffort } } = {
       name: configuredModel.id
     };
     if (Object.keys(limit).length > 0) {
       modelDefinition.limit = limit;
+    }
+    if (configuredModel.id === selectedModelConfig?.id && runtimeSettings.reasoningEffort) {
+      modelDefinition.options = { reasoningEffort: runtimeSettings.reasoningEffort };
     }
     desired.push(managedField(['provider', provider.key, 'models', configuredModel.id], modelDefinition));
   }
@@ -254,6 +281,7 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
       autoCompactWindow: positiveIntegerOrUndefined(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW) ?? null,
       maxOutputTokens: positiveIntegerOrUndefined(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) ?? null,
       runtimeSettings: {
+        effortLevel: knownString(config.effortLevel, CLAUDE_EFFORT_LEVELS),
         autoCompactPctOverride: positiveIntegerOrUndefined(env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE),
         attributionHeader: claudeModeFromValue(env.CLAUDE_CODE_ATTRIBUTION_HEADER, '1', '0'),
         disableNonessentialTraffic: claudeModeFromValue(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1', '0'),
@@ -335,6 +363,7 @@ async function readCodexState(context: vscode.ExtensionContext, providers: Provi
       modelAutoCompactTokenLimit: numberOrNull(config.model_auto_compact_token_limit),
       runtimeSettings: {
         serviceTier: knownString(config.service_tier, CODEX_SERVICE_TIERS),
+        modelReasoningEffort: knownString(config.model_reasoning_effort, REASONING_EFFORTS),
         sandboxMode: knownString(config.sandbox_mode, CODEX_SANDBOX_MODES),
         approvalPolicy: knownString(config.approval_policy, CODEX_APPROVAL_POLICIES)
       },
@@ -371,7 +400,8 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
     model: '',
     modelContextWindow: null,
     maxOutputTokens: null,
-    compactionReserved: null
+    compactionReserved: null,
+    runtimeSettings: {}
   };
 
   try {
@@ -386,6 +416,7 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
     const providerApiKey = stringValue(providerOptions.apiKey);
     const providerModels = objectValue(providerBlock.models);
     const selectedModelBlock = objectValue(providerModels[model]);
+    const selectedModelOptions = objectValue(selectedModelBlock.options);
     const selectedLimit = objectValue(selectedModelBlock.limit);
     const targetId = managedTargetId('opencode', filePath);
     const matched = providers.find((provider) => {
@@ -409,6 +440,9 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
       modelContextWindow: numberOrNull(selectedLimit.context),
       maxOutputTokens: numberOrNull(selectedLimit.output),
       compactionReserved: numberOrNull(objectValue(config.compaction).reserved),
+      runtimeSettings: {
+        reasoningEffort: knownString(selectedModelOptions.reasoningEffort, REASONING_EFFORTS)
+      },
       managedPaths: await readManagedPaths(context, targetId, config)
     };
   } catch (error) {
@@ -520,6 +554,30 @@ function emptyClaudeModels(): ClaudeAgentState['models'] {
   return Object.fromEntries(CLAUDE_MODEL_KEYS.map((key) => [key, ''])) as ClaudeAgentState['models'];
 }
 
+function deleteOptionalPath(config: Record<string, unknown>, pathToDelete: string[]): void {
+  const parents: Array<{ parent: Record<string, unknown>; key: string }> = [];
+  let current = config;
+  for (let index = 0; index < pathToDelete.length - 1; index += 1) {
+    const segment = pathToDelete[index];
+    const child = current[segment];
+    if (!child || typeof child !== 'object' || Array.isArray(child)) {
+      return;
+    }
+    parents.push({ parent: current, key: segment });
+    current = child as Record<string, unknown>;
+  }
+  delete current[pathToDelete[pathToDelete.length - 1]];
+  for (let index = parents.length - 1; index >= 0; index -= 1) {
+    const { parent, key } = parents[index];
+    const child = parent[key];
+    if (child && typeof child === 'object' && !Array.isArray(child) && Object.keys(child).length === 0) {
+      delete parent[key];
+    } else {
+      break;
+    }
+  }
+}
+
 function objectValue(value: unknown): JsonObject {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonObject : {};
 }
@@ -555,14 +613,8 @@ function pushClaudeModeField<T>(fields: ManagedField[], path: string[], mode: Cl
 
 function normalizeClaudeRuntimeSettings(value: unknown): ClaudeRuntimeSettings {
   const raw = objectValue(value);
-  const autoCompactPctOverride = raw.autoCompactPctOverride === undefined || raw.autoCompactPctOverride === null || raw.autoCompactPctOverride === ''
-    ? undefined
-    : Number(raw.autoCompactPctOverride);
-  if (autoCompactPctOverride !== undefined && (!Number.isInteger(autoCompactPctOverride) || autoCompactPctOverride < 1 || autoCompactPctOverride > 99)) {
-    throw new Error('Claude 自动压缩比例覆盖必须是 1-99 的整数百分比。');
-  }
   return {
-    autoCompactPctOverride,
+    effortLevel: optionalKnownString(raw.effortLevel, CLAUDE_EFFORT_LEVELS, 'Claude effortLevel'),
     attributionHeader: normalizeClaudeMode(raw.attributionHeader),
     disableNonessentialTraffic: normalizeClaudeMode(raw.disableNonessentialTraffic),
     experimentalAgentTeams: normalizeClaudeMode(raw.experimentalAgentTeams),
@@ -575,8 +627,16 @@ function normalizeCodexRuntimeSettings(value: unknown): CodexRuntimeSettings {
   const raw = objectValue(value);
   return {
     serviceTier: optionalKnownString(raw.serviceTier, CODEX_SERVICE_TIERS, 'Codex service_tier'),
+    modelReasoningEffort: optionalKnownString(raw.modelReasoningEffort, REASONING_EFFORTS, 'Codex model_reasoning_effort'),
     sandboxMode: optionalKnownString(raw.sandboxMode, CODEX_SANDBOX_MODES, 'Codex sandbox_mode'),
     approvalPolicy: optionalKnownString(raw.approvalPolicy, CODEX_APPROVAL_POLICIES, 'Codex approval_policy')
+  };
+}
+
+function normalizeOpencodeRuntimeSettings(value: unknown): OpencodeRuntimeSettings {
+  const raw = objectValue(value);
+  return {
+    reasoningEffort: optionalKnownString(raw.reasoningEffort, REASONING_EFFORTS, 'opencode reasoningEffort')
   };
 }
 

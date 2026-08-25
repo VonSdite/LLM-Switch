@@ -20,16 +20,17 @@ test('严格校验拒绝大于上下文窗口的最大输出', () => {
   }], true), /最大输出不能大于上下文窗口/);
 });
 
-test('拉取模型按 ID 保留参数并让新模型参数保持空白', () => {
+test('拉取模型按 ID 保留参数并为新模型补默认参数', () => {
   const merged = mergeFetchedModels([{
     id: 'glm-5.3',
     contextWindow: 1_048_576,
     compactThresholdPercent: 75,
     maxOutputTokens: 131_072
-  }], ['glm-5.3', 'unknown-model']);
+  }], ['glm-5.3', 'glm-5.2', 'unknown-model']);
   assert.deepEqual(merged, [
+    { id: 'glm-5.2', contextWindow: 1_000_000, compactThresholdPercent: 60, maxOutputTokens: undefined },
     { id: 'glm-5.3', contextWindow: 1_048_576, compactThresholdPercent: 75, maxOutputTokens: 131_072 },
-    { id: 'unknown-model', contextWindow: undefined, compactThresholdPercent: undefined, maxOutputTokens: undefined }
+    { id: 'unknown-model', contextWindow: 200_000, compactThresholdPercent: 60, maxOutputTokens: undefined }
   ]);
 });
 
@@ -39,8 +40,8 @@ test('内置候选支持精确、别名、日期快照和通用回退', () => {
   assert.equal(getModelParameterSuggestions('provider/glm-5.3-20260824').matchKind, 'snapshot');
   const unknown = getModelParameterSuggestions('my-private-model');
   assert.equal(unknown.matchKind, 'fallback');
-  assert.equal(unknown.contextWindow[0].value, 128_000);
-  assert.equal(unknown.compactThresholdPercent[0].value, 80);
+  assert.equal(unknown.contextWindow[0].value, 200_000);
+  assert.equal(unknown.compactThresholdPercent[0].value, 60);
   assert.equal(unknown.maxOutputTokens[0].value, 32_000);
 });
 

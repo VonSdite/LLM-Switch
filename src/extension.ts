@@ -11,9 +11,23 @@ import {
 } from './agentConfigs';
 import { ConfigPathTarget, resetAgentConfigPath, setAgentConfigPath } from './configPaths';
 import { claudeModelVariants, getModelParameterSuggestions } from './modelPresets';
+import { defaultFetchedModelConfig } from './providerModels';
 import { deleteProvider, loadProviders, reorderProviders, upsertProvider } from './providerStore';
 import { getManagerHtml } from './webview';
-import { AgentName, CLAUDE_MODEL_KEYS, ClaudeAgentState, CodexAgentState, OpencodeAgentState, ProviderConfig, ProviderModelConfig, WebviewState } from './types';
+import {
+  AgentName,
+  CLAUDE_EFFORT_LEVELS,
+  CLAUDE_MODEL_KEYS,
+  ClaudeAgentState,
+  ClaudeEffortLevel,
+  CodexAgentState,
+  OpencodeAgentState,
+  ProviderConfig,
+  ProviderModelConfig,
+  REASONING_EFFORTS,
+  ReasoningEffort,
+  WebviewState
+} from './types';
 
 interface WebviewMessage {
   type: string;
@@ -47,6 +61,10 @@ interface ModelQuickPickItem extends vscode.QuickPickItem {
   model: string;
 }
 
+interface EffortQuickPickItem<T extends string> extends vscode.QuickPickItem {
+  effort?: T;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const manager = new LlmSwitchManager(context);
 
@@ -57,7 +75,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('llm-switch.openOpencodeConfig', () => openConfigInEditor(context, 'opencode')),
     vscode.commands.registerCommand('llm-switch.quickSwitchClaudeModel', () => manager.quickSwitchModel('claude')),
     vscode.commands.registerCommand('llm-switch.quickSwitchCodexModel', () => manager.quickSwitchModel('codex')),
-    vscode.commands.registerCommand('llm-switch.quickSwitchOpencodeModel', () => manager.quickSwitchModel('opencode'))
+    vscode.commands.registerCommand('llm-switch.quickSwitchOpencodeModel', () => manager.quickSwitchModel('opencode')),
+    vscode.commands.registerCommand('llm-switch.setClaudeEffort', () => manager.setEffort('claude')),
+    vscode.commands.registerCommand('llm-switch.setCodexEffort', () => manager.setEffort('codex')),
+    vscode.commands.registerCommand('llm-switch.setOpencodeEffort', () => manager.setEffort('opencode'))
   );
 }
 
@@ -74,6 +95,17 @@ class LlmSwitchManager {
   public async quickSwitchModel(agent: AgentName): Promise<void> {
     try {
       const changed = await quickSwitchAgentModel(this.context, agent);
+      if (changed) {
+        await this.broadcastState();
+      }
+    } catch (error) {
+      await vscode.window.showErrorMessage(`LLM-Switch: ${errorMessage(error)}`);
+    }
+  }
+
+  public async setEffort(agent: AgentName): Promise<void> {
+    try {
+      const changed = await setAgentEffort(this.context, agent);
       if (changed) {
         await this.broadcastState();
       }
@@ -294,24 +326,158 @@ async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: Ag
   }
 
   if (agent === 'claude') {
+    const effortLevel = await pickClaudeEffort(agents.claude.runtimeSettings.effortLevel);
+    if (effortLevel === null) {
+      return false;
+    }
+    const runtimeSettings = { ...agents.claude.runtimeSettings, effortLevel };
+    if (!effortLevel) {
+      delete runtimeSettings.effortLevel;
+    }
     const models = Object.fromEntries(CLAUDE_MODEL_KEYS.map((key) => [key, selected.model])) as Record<typeof CLAUDE_MODEL_KEYS[number], string>;
     await saveClaudeConfig(context, providers, {
       providerId: selected.providerId,
       models,
-      runtimeSettings: agents.claude.runtimeSettings
+      runtimeSettings
     });
     return true;
   }
   if (agent === 'codex') {
+    const modelReasoningEffort = await pickReasoningEffort('Codex', agents.codex.runtimeSettings.modelReasoningEffort);
+    if (modelReasoningEffort === null) {
+      return false;
+    }
+    const runtimeSettings = { ...agents.codex.runtimeSettings, modelReasoningEffort };
+    if (!modelReasoningEffort) {
+      delete runtimeSettings.modelReasoningEffort;
+    }
     await saveCodexConfig(context, providers, {
       providerId: selected.providerId,
       model: selected.model,
-      runtimeSettings: agents.codex.runtimeSettings
+      runtimeSettings
     });
     return true;
   }
-  await saveOpencodeConfig(context, providers, { providerId: selected.providerId, model: selected.model });
+  const reasoningEffort = await pickReasoningEffort('opencode', agents.opencode.runtimeSettings.reasoningEffort);
+  if (reasoningEffort === null) {
+    return false;
+  }
+  const runtimeSettings = { ...agents.opencode.runtimeSettings, reasoningEffort };
+  if (!reasoningEffort) {
+    delete runtimeSettings.reasoningEffort;
+  }
+  await saveOpencodeConfig(context, providers, { providerId: selected.providerId, model: selected.model, runtimeSettings });
   return true;
+}
+
+async function setAgentEffort(context: vscode.ExtensionContext, agent: AgentName): Promise<boolean> {
+  const providers = await loadProviders(context);
+  const agents = await readAgentsState(context, providers);
+  const agentState = agents[agent];
+  const agentLabel = agentDisplayName(agent);
+  if (agentState.parseError) {
+    throw new Error(`${agentLabel} 配置读取失败：${agentState.parseError}`);
+  }
+
+  const provider = providers.find((item) => item.id === agentState.selectedProviderId && providerSupportsAgent(item, agent));
+  if (!provider) {
+    await vscode.window.showWarningMessage(`LLM-Switch: 当前 ${agentLabel} 未匹配到可用 Provider，请先在 Agents 页面选择 Provider。`);
+    return false;
+  }
+
+  if (agent === 'claude') {
+    const effortLevel = await pickClaudeEffort(agents.claude.runtimeSettings.effortLevel);
+    if (effortLevel === null) {
+      return false;
+    }
+    const runtimeSettings = { ...agents.claude.runtimeSettings, effortLevel };
+    if (!effortLevel) {
+      delete runtimeSettings.effortLevel;
+    }
+    await saveClaudeConfig(context, providers, {
+      providerId: provider.id,
+      models: agents.claude.models,
+      runtimeSettings
+    });
+    return true;
+  }
+
+  if (agent === 'codex') {
+    if (!agents.codex.model.trim()) {
+      await vscode.window.showWarningMessage('LLM-Switch: 当前 Codex 未配置模型，请先在 Agents 页面选择模型。');
+      return false;
+    }
+    const modelReasoningEffort = await pickReasoningEffort('Codex', agents.codex.runtimeSettings.modelReasoningEffort);
+    if (modelReasoningEffort === null) {
+      return false;
+    }
+    const runtimeSettings = { ...agents.codex.runtimeSettings, modelReasoningEffort };
+    if (!modelReasoningEffort) {
+      delete runtimeSettings.modelReasoningEffort;
+    }
+    await saveCodexConfig(context, providers, {
+      providerId: provider.id,
+      model: agents.codex.model,
+      runtimeSettings
+    });
+    return true;
+  }
+
+  if (!agents.opencode.model.trim()) {
+    await vscode.window.showWarningMessage('LLM-Switch: 当前 opencode 未配置模型，请先在 Agents 页面选择模型。');
+    return false;
+  }
+  const reasoningEffort = await pickReasoningEffort('opencode', agents.opencode.runtimeSettings.reasoningEffort);
+  if (reasoningEffort === null) {
+    return false;
+  }
+  const runtimeSettings = { ...agents.opencode.runtimeSettings, reasoningEffort };
+  if (!reasoningEffort) {
+    delete runtimeSettings.reasoningEffort;
+  }
+  await saveOpencodeConfig(context, providers, {
+    providerId: provider.id,
+    model: agents.opencode.model,
+    runtimeSettings
+  });
+  return true;
+}
+
+async function pickClaudeEffort(current: ClaudeEffortLevel | undefined): Promise<ClaudeEffortLevel | undefined | null> {
+  return pickEffort('Claude effortLevel', CLAUDE_EFFORT_LEVELS, current);
+}
+
+async function pickReasoningEffort(label: string, current: ReasoningEffort | undefined): Promise<ReasoningEffort | undefined | null> {
+  return pickEffort(`${label} reasoning effort`, REASONING_EFFORTS, current);
+}
+
+async function pickEffort<T extends string>(title: string, values: readonly T[], current: T | undefined): Promise<T | undefined | null> {
+  const items = effortQuickPickItems(values, current);
+  const selected = await vscode.window.showQuickPick(items, {
+    title: `LLM-Switch: ${title}`,
+    placeHolder: current ? `当前：${current}` : '当前：不设置'
+  });
+  return selected ? selected.effort : null;
+}
+
+function effortQuickPickItems<T extends string>(values: readonly T[], current: T | undefined): Array<EffortQuickPickItem<T>> {
+  const unsetItem: EffortQuickPickItem<T> = {
+    label: '不设置',
+    description: current ? undefined : '当前'
+  };
+  const valueItems = values.map((value) => ({
+    label: value,
+    effort: value,
+    description: value === current ? '当前' : undefined
+  }));
+  if (!current) {
+    return [unsetItem, ...valueItems];
+  }
+  return [
+    ...valueItems.filter((item) => item.effort === current),
+    unsetItem,
+    ...valueItems.filter((item) => item.effort !== current)
+  ];
 }
 
 function modelQuickPickItems(agent: AgentName, providers: ProviderConfig[], agentState: ClaudeAgentState | CodexAgentState | OpencodeAgentState): ModelQuickPickItem[] {
@@ -330,11 +496,11 @@ function modelQuickPickItem(agent: AgentName, provider: ProviderConfig, modelCon
     modelConfig.compactThresholdPercent !== undefined ? `压缩 ${modelConfig.compactThresholdPercent}%` : '',
     modelConfig.maxOutputTokens ? `输出 ${modelConfig.maxOutputTokens.toLocaleString()}` : ''
   ].filter(Boolean);
-  const parameterSummary = parameterParts.length ? parameterParts.join('，') : '模型参数未配置';
+  const apiSummary = `${agentDisplayName(agent)} API: ${providerApiUrl(provider, agent)}`;
   return {
     label: `${provider.name} / ${model.replace(/\[1m\]$/i, ' [1M]')}`,
     description: isCurrent ? '当前' : undefined,
-    detail: `${parameterSummary} · ${agentDisplayName(agent)} API: ${providerApiUrl(provider, agent)}`,
+    detail: parameterParts.length ? `${parameterParts.join('，')} · ${apiSummary}` : apiSummary,
     providerId: provider.id,
     model
   };
@@ -476,7 +642,7 @@ function fetchProviderModelsPayload(payload: unknown): FetchProviderModelsPayloa
   };
 }
 
-async function fetchProviderModels(payload: FetchProviderModelsPayload): Promise<{ models: string[]; sourceUrl: string }> {
+async function fetchProviderModels(payload: FetchProviderModelsPayload): Promise<{ models: string[]; modelDefaults: ProviderModelConfig[]; sourceUrl: string }> {
   const baseUrl = inferModelApiBaseUrl(payload);
   const candidates = ['/v1/models', '/models'].map((suffix) => joinUrl(baseUrl, suffix));
   const errors: string[] = [];
@@ -485,7 +651,7 @@ async function fetchProviderModels(payload: FetchProviderModelsPayload): Promise
     try {
       const models = await fetchModelsFromUrl(url, payload);
       if (models.length > 0) {
-        return { models, sourceUrl: url };
+        return { models, modelDefaults: models.map(defaultFetchedModelConfig), sourceUrl: url };
       }
       errors.push(`${url}: 未返回模型列表`);
     } catch (error) {

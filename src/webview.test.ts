@@ -27,7 +27,7 @@ test('Webview 脚本可解析并渲染 Provider 模型参数台账', () => {
 
   assert.match(harness.app.innerHTML, /模型 ID/);
   assert.match(harness.app.innerHTML, /上下文窗口/);
-  assert.match(harness.app.innerHTML, /压缩阈值 %/);
+  assert.match(harness.app.innerHTML, /压缩阈值/);
   assert.match(harness.app.innerHTML, /最大输出/);
   assert.match(harness.app.innerHTML, /1048576/);
   assert.match(harness.app.innerHTML, /data-model-candidate-menu="contextWindow"/);
@@ -46,13 +46,14 @@ test('Webview 脚本可解析并渲染 Provider 模型参数台账', () => {
     suggestions: {
       sourceLabel: '测试模型参数来源',
       contextWindow: [{ value: 777_777, label: '测试上下文候选' }],
-      compactThresholdPercent: [{ value: 80, label: '测试压缩候选' }],
+      compactThresholdPercent: [{ value: 60, label: '测试压缩候选' }],
       maxOutputTokens: [{ value: 66_666, label: '测试输出候选' }]
     }
   });
   harness.click('provider-model-add');
 
-  assert.match(harness.app.innerHTML, /777,777/);
+  assert.match(harness.app.innerHTML, /777777/);
+  assert.match(harness.app.innerHTML, /id="providerModel_1_compactThresholdPercent"[^>]*value="60"/);
   assert.match(harness.app.innerHTML, /model-candidate-option/);
   assert.doesNotMatch(harness.app.innerHTML, /测试模型参数来源/);
   assert.doesNotMatch(harness.app.innerHTML, /测试上下文候选/);
@@ -87,6 +88,7 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
         autoCompactWindow: 1_048_576,
         maxOutputTokens: 131_072,
         runtimeSettings: {
+          effortLevel: 'xhigh',
           attributionHeader: 'unset',
           disableNonessentialTraffic: 'unset',
           experimentalAgentTeams: 'unset',
@@ -110,7 +112,7 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
   assert.match(harness.app.innerHTML, /class="help-icon" data-action="help-toggle"/);
   assert.match(harness.app.innerHTML, /data-help-popover="1" role="tooltip" hidden/);
   assert.doesNotMatch(harness.app.innerHTML, /class="help-icon" title=/);
-  assert.match(harness.app.innerHTML, /id="claudeAutoCompactPctOverride"[^>]*value=""/);
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeEffortLevel'), 'xhigh');
   assert.match(harness.app.innerHTML, /<span>非必要流量<\/span>/);
   assert.doesNotMatch(harness.app.innerHTML, /<span>禁用非必要流量<\/span>/);
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeAttributionHeader'), 'unset');
@@ -128,7 +130,7 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
   assert.doesNotMatch(harness.app.innerHTML, /sandbox\.enabled/);
 });
 
-test('Codex 页面支持 service tier、沙箱和审批策略', () => {
+test('Codex 页面支持 service tier、reasoning effort、沙箱和审批策略', () => {
   const harness = createHarness({ activeTab: 'agents', activeAgentTab: 'codex' });
   harness.sendState({
     providers: [providerFixture()],
@@ -140,9 +142,11 @@ test('Codex 页面支持 service tier、沙箱和审批策略', () => {
   });
 
   assert.match(harness.app.innerHTML, /Service tier/);
+  assert.match(harness.app.innerHTML, /Reasoning effort/);
   assert.match(harness.app.innerHTML, /Sandbox mode/);
   assert.match(harness.app.innerHTML, /Approval policy/);
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexServiceTier'), '');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexModelReasoningEffort'), '');
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexSandboxMode'), '');
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexApprovalPolicy'), '');
 
@@ -152,6 +156,7 @@ test('Codex 页面支持 service tier、沙箱和审批策略', () => {
       claude: {},
       codex: codexAgentFixture({
         serviceTier: 'priority',
+        modelReasoningEffort: 'high',
         sandboxMode: 'workspace-write',
         approvalPolicy: 'on-request'
       }),
@@ -160,9 +165,11 @@ test('Codex 页面支持 service tier、沙箱和审批策略', () => {
   });
 
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexServiceTier'), 'priority');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexModelReasoningEffort'), 'high');
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexSandboxMode'), 'workspace-write');
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexApprovalPolicy'), 'on-request');
   assert.match(harness.app.innerHTML, /service_tier/);
+  assert.match(harness.app.innerHTML, /<ul>/);
   assert.match(harness.app.innerHTML, /auto：使用项目配置的服务档位/);
   assert.match(harness.app.innerHTML, /default：标准处理档位/);
   assert.match(harness.app.innerHTML, /flex：弹性处理/);
@@ -170,6 +177,7 @@ test('Codex 页面支持 service tier、沙箱和审批策略', () => {
   assert.match(harness.app.innerHTML, /实际可用档位取决于模型和上游 Provider/);
   assert.match(harness.app.innerHTML, /sandbox_mode/);
   assert.match(harness.app.innerHTML, /approval_policy/);
+  assert.match(harness.app.innerHTML, /model_reasoning_effort/);
 });
 
 test('opencode 模型参数留空时仍可保存', () => {
@@ -192,6 +200,9 @@ test('opencode 模型参数留空时仍可保存', () => {
         providerKey: 'provider-one',
         model: 'private-model',
         providerModelCount: 1,
+        runtimeSettings: {
+          reasoningEffort: 'medium'
+        },
         managedPaths: []
       }
     }
@@ -201,6 +212,8 @@ test('opencode 模型参数留空时仍可保存', () => {
   assert.match(harness.app.innerHTML, /<button data-action="save-opencode" >保存<\/button>/);
   assert.match(harness.app.innerHTML, /1 个模型/);
   assert.match(harness.app.innerHTML, /2 个模型/);
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'opencodeReasoningEffort'), 'medium');
+  assert.match(harness.app.innerHTML, /options\.reasoningEffort/);
 });
 
 function createHarness(restoredState: Record<string, unknown>): WebviewHarness {
@@ -307,7 +320,7 @@ function providerFixture(): Record<string, unknown> {
     models: [{
       id: 'glm-5.3',
       contextWindow: 1_048_576,
-      compactThresholdPercent: 80,
+      compactThresholdPercent: 60,
       maxOutputTokens: 131_072
     }],
     claudeBaseUrl: 'https://claude.example/v1',

@@ -155,8 +155,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
       font-size: 12px;
       font-weight: 400;
       line-height: 1.5;
-      white-space: pre-line;
       overflow-wrap: anywhere;
+    }
+    .help-popover ul {
+      margin: 0;
+      padding-left: 16px;
+    }
+    .help-popover li + li {
+      margin-top: 4px;
     }
     .help-popover::before {
       content: "";
@@ -1120,7 +1126,11 @@ export function getManagerHtml(webview: vscode.Webview): string {
         'ANTHROPIC_MODEL',
         'ANTHROPIC_REASONING_MODEL'
       ];
+      const defaultCompactThresholdPercent = 60;
+      const defaultFetchedContextWindow = 200000;
       const defaultOpencodeNpm = '@ai-sdk/openai-compatible';
+      const claudeEffortLevels = ['low', 'medium', 'high', 'xhigh'];
+      const reasoningEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh'];
       const restored = vscode.getState() || {};
       const providerNameRule = '只允许英文字母、数字、下划线和中划线，长度 1-64，且必须以字母或数字开头。名称需唯一。';
       let activeTab = restored.activeTab || 'providers';
@@ -1134,7 +1144,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
         codexModel: null,
         codexRuntimeSettings: null,
         opencodeProviderId: null,
-        opencodeModel: null
+        opencodeModel: null,
+        opencodeRuntimeSettings: null
       };
       let providerModal = null;
       let modelPicker = null;
@@ -1160,7 +1171,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (message.type === 'providerModelsFetched') {
           modelFetchBusy = false;
-          openModelPicker(message.models || [], message.sourceUrl || '');
+          openModelPicker(message.models || [], message.sourceUrl || '', message.modelDefaults || []);
           render();
         }
         if (message.type === 'modelParameterSuggestions') {
@@ -1256,7 +1267,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (action === 'provider-model-add') {
           updateProviderModalDraftFromForm();
-          providerModal.models.push({ id: '' });
+          providerModal.models.push({ id: '', compactThresholdPercent: defaultCompactThresholdPercent });
           render();
         }
         if (action === 'provider-model-remove') {
@@ -1396,6 +1407,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
           drafts.opencodeModel = target.value;
           render();
         }
+        if (target.dataset && target.dataset.opencodeRuntimeSetting) {
+          drafts.opencodeRuntimeSettings = collectOpencodeRuntimeSettings();
+          render();
+        }
         if (target.id === 'providerProxyMode') {
           updateProviderModalDraftFromForm();
           render();
@@ -1425,6 +1440,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         if (target && target.dataset && target.dataset.claudeRuntimeSetting) {
           drafts.claudeRuntimeSettings = collectClaudeRuntimeSettings();
+        }
+        if (target && target.dataset && target.dataset.opencodeRuntimeSetting) {
+          drafts.opencodeRuntimeSettings = collectOpencodeRuntimeSettings();
         }
         if (target && target.dataset && target.dataset.providerModelField) {
           updateProviderModelDraftFromInput(target);
@@ -1682,9 +1700,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
                   '<label class="checkbox-line"><span>校验证书</span><input id="providerSslCheck" type="checkbox" ' + (selected.sslCheck ? 'checked' : '') + '></label>' +
                   '<button type="button" class="secondary" data-action="provider-model-fetch" ' + (modelFetchBusy ? 'disabled' : '') + '>' + (modelFetchBusy ? '拉取中...' : '拉取模型') + '</button>' +
                 '</div></div>' +
-                '<div class="model-ledger-actions">' +
-                  '<button type="button" class="secondary" data-action="provider-model-add">添加模型</button>' +
-                '</div>' +
                 renderProviderModelLedger(selected.models) +
               '</div>' +
             '</div>' +
@@ -1699,23 +1714,31 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function renderProviderModelLedger(models) {
         const items = models || [];
         if (!items.length) {
-          return '<div class="empty">还没有模型。添加模型 ID 后会显示上下文、压缩阈值和最大输出候选。</div>';
+          return '<div class="empty">还没有模型。添加模型 ID 后会显示上下文、压缩阈值和最大输出候选。</div>' +
+            renderModelLedgerAddAction();
         }
         return '<div class="model-ledger">' +
-          '<div class="model-ledger-head"><span>模型 ID</span><span>上下文窗口</span><span>压缩阈值 %</span><span>最大输出</span><span></span></div>' +
+          '<div class="model-ledger-head"><span>模型 ID</span><span>上下文窗口</span><span>压缩阈值</span><span>最大输出</span><span></span></div>' +
           items.map(function (model, index) {
             const warning = modelParameterWarning(model);
             return '<div class="model-ledger-row ' + (warning ? 'has-warning' : '') + '" data-model-row-index="' + index + '">' +
               '<div class="model-ledger-main">' +
-                modelParameterInput(index, 'id', model.id || '', '例如 glm-5.3', 'text') +
-                modelParameterInput(index, 'contextWindow', model.contextWindow || '', '例如 128000', 'number', undefined, undefined, model) +
-                modelParameterInput(index, 'compactThresholdPercent', model.compactThresholdPercent === undefined ? '' : model.compactThresholdPercent, '点击选择或手动填写', 'number', '1', '99', model) +
-                modelParameterInput(index, 'maxOutputTokens', model.maxOutputTokens || '', '例如 32000', 'number', undefined, undefined, model) +
+                modelParameterInput(index, 'id', model.id || '', 'glm-5.3', 'text') +
+                modelParameterInput(index, 'contextWindow', model.contextWindow || '', String(defaultFetchedContextWindow), 'number', undefined, undefined, model) +
+                modelParameterInput(index, 'compactThresholdPercent', model.compactThresholdPercent === undefined ? '' : model.compactThresholdPercent, String(defaultCompactThresholdPercent), 'number', '1', '99', model) +
+                modelParameterInput(index, 'maxOutputTokens', model.maxOutputTokens || '', '32000', 'number', undefined, undefined, model) +
                 '<button type="button" class="ghost model-ledger-remove" data-action="provider-model-remove" data-model-index="' + index + '" title="删除模型" aria-label="删除模型">×</button>' +
               '</div>' +
               '<div class="model-warning" data-model-warning="' + index + '" ' + (warning ? '' : 'hidden') + '>' + h(warning) + '</div>' +
             '</div>';
           }).join('') +
+        '</div>' +
+        renderModelLedgerAddAction();
+      }
+
+      function renderModelLedgerAddAction() {
+        return '<div class="model-ledger-actions">' +
+          '<button type="button" class="secondary" data-action="provider-model-add">添加模型</button>' +
         '</div>';
       }
 
@@ -1755,9 +1778,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function candidateButton(index, fieldName, candidate) {
-        const suffix = fieldName === 'compactThresholdPercent' ? '%' : '';
         return '<button type="button" class="model-candidate-option" role="option" data-action="model-candidate-apply" data-model-index="' + index + '" data-model-field="' + attr(fieldName) + '" data-model-value="' + attr(candidate.value) + '">' +
-          '<span class="model-candidate-value">' + h(formatInteger(candidate.value) + suffix) + '</span>' +
+          '<span class="model-candidate-value">' + h(String(candidate.value)) + '</span>' +
         '</button>';
       }
 
@@ -1889,7 +1911,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
             }).join('') + '</div>' +
             '<h3 class="section-title">运行设置</h3>' +
             '<div class="runtime-grid">' +
-              fieldWithHelp('自动压缩比例覆盖 %', '所选模型配置了压缩阈值时优先写入模型值；模型未配置时，此处作为 CLAUDE_AUTOCOMPACT_PCT_OVERRIDE 的手动兜底。', '<input id="claudeAutoCompactPctOverride" data-claude-runtime-setting="autoCompactPctOverride" type="number" min="1" max="99" step="1" value="' + attr(runtimeSettings.autoCompactPctOverride || '') + '" placeholder="不设置">') +
+              claudeEffortField(runtimeSettings.effortLevel) +
               runtimeModeField('claudeAttributionHeader', 'Attribution Header', runtimeSettings.attributionHeader, 'CLAUDE_CODE_ATTRIBUTION_HEADER') +
               runtimeModeField('claudeDisableNonessentialTraffic', '非必要流量', runtimeSettings.disableNonessentialTraffic, 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', [
                 ['unset', '不设置'],
@@ -1903,6 +1925,16 @@ export function getManagerHtml(webview: vscode.Webview): string {
             renderClaudeChangePreview(agent, provider, selectedModels, runtimeSettings, disabled) +
           '</div>' +
         '</section>';
+      }
+
+      function claudeEffortField(selected) {
+        return fieldWithHelp('Effort level', '- 写入 settings.json 的 effortLevel。\\n- 不设置时清理插件管理的 effortLevel。\\n- 可选值对应 Claude Code 的 /effort 和 --effort。', select(
+          'claudeEffortLevel',
+          [['', '不设置']].concat(claudeEffortLevels.map(function (value) { return [value, value]; })),
+          selected || '',
+          false,
+          'claude-runtime-select'
+        ).replace('<select ', '<select data-claude-runtime-setting="effortLevel" '));
       }
 
       function runtimeModeField(id, label, selected, settingName, options) {
@@ -1941,11 +1973,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
                 ['flex', 'flex'],
                 ['priority', 'priority（Fast）']
               ], '写入 service_tier。实际可用档位取决于模型和上游 Provider。\\n' +
-                '不设置：不由插件管理现有值。\\n' +
-                'auto：使用项目配置的服务档位；项目未指定时通常使用 default。\\n' +
-                'default：标准处理档位。\\n' +
-                'flex：弹性处理，通常成本更低，但响应更慢，并可能临时无可用资源。\\n' +
-                'priority：优先处理（Fast），通常延迟更低、成本更高，需要上游支持。') +
+                '- 不设置：清理插件管理的现有值。\\n' +
+                '- auto：使用项目配置的服务档位；项目未指定时通常使用 default。\\n' +
+                '- default：标准处理档位。\\n' +
+                '- flex：弹性处理，通常成本更低，但响应更慢，并可能临时无可用资源。\\n' +
+                '- priority：优先处理（Fast），通常延迟更低、成本更高，需要上游支持。') +
+              codexRuntimeField('codexModelReasoningEffort', 'Reasoning effort', 'model_reasoning_effort', runtimeSettings.modelReasoningEffort, reasoningEfforts.map(function (value) {
+                return [value, value];
+              }), '- 写入 model_reasoning_effort。\\n- 不设置时清理插件管理的现有值。\\n- Codex 不在这里写最大输出窗口。') +
               codexRuntimeField('codexSandboxMode', 'Sandbox mode', 'sandbox_mode', runtimeSettings.sandboxMode, [
                 ['read-only', 'read-only（只读）'],
                 ['workspace-write', 'workspace-write（工作区可写）'],
@@ -1963,13 +1998,23 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function codexRuntimeField(id, label, settingName, selected, options, help) {
-        return fieldWithHelp(label, help || ('写入 ' + settingName + '。不设置时保留非插件管理的现有值。'), select(
+        return fieldWithHelp(label, help || ('写入 ' + settingName + '。不设置时清理插件管理的现有值。'), select(
           id,
           [['', '不设置']].concat(options),
           selected || '',
           false,
           'codex-runtime-select'
         ).replace('<select ', '<select data-codex-runtime-setting="' + attr(settingName) + '" '));
+      }
+
+      function opencodeRuntimeField(id, label, settingName, selected, options, help) {
+        return fieldWithHelp(label, help || ('写入 ' + settingName + '。不设置时清理插件管理的现有值。'), select(
+          id,
+          [['', '不设置']].concat(options),
+          selected || '',
+          false,
+          'opencode-runtime-select'
+        ).replace('<select ', '<select data-opencode-runtime-setting="' + attr(settingName) + '" '));
       }
 
       function renderOpencode() {
@@ -1979,6 +2024,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const provider = state.providers.find(function (item) { return item.id === selectedId; });
         let disabled = Boolean(agent.parseError) || !provider || provider.models.length === 0;
         const selectedModel = selectedOpencodeModelValue(provider, selectedId, agent);
+        const runtimeSettings = drafts.opencodeRuntimeSettings || agent.runtimeSettings || {};
         let notices = renderParseNotice(agent);
         if (provider && provider.models.length === 0) {
           notices += '<div class="notice">该 Provider 还没有模型列表，请先回到 Providers 添加模型。</div>';
@@ -1990,7 +2036,13 @@ export function getManagerHtml(webview: vscode.Webview): string {
           '<div class="form">' +
             '<h3 class="section-title">opencode 模型</h3>' +
             fieldGroup('model', modelSelect('opencodeModel', provider, selectedModel, disabled)) +
-            renderOpencodeChangePreview(agent, provider, selectedModel, disabled) +
+            '<h3 class="section-title">运行设置</h3>' +
+            '<div class="runtime-grid">' +
+              opencodeRuntimeField('opencodeReasoningEffort', 'Reasoning effort', 'reasoningEffort', runtimeSettings.reasoningEffort, reasoningEfforts.map(function (value) {
+                return [value, value];
+              }), '- 写入所选模型的 options.reasoningEffort。\\n- 不设置时清理所选模型里插件管理的 reasoningEffort。') +
+            '</div>' +
+            renderOpencodeChangePreview(agent, provider, selectedModel, runtimeSettings, disabled) +
           '</div>' +
         '</section>';
       }
@@ -2241,12 +2293,19 @@ export function getManagerHtml(webview: vscode.Webview): string {
         });
       }
 
-      function openModelPicker(models, sourceUrl) {
+      function openModelPicker(models, sourceUrl, modelDefaults) {
         if (!providerModal) {
           return;
         }
         updateProviderModalDraftFromForm();
         const fetched = dedupeModels(models);
+        const defaultsById = {};
+        (modelDefaults || []).forEach(function (model) {
+          const id = String(model && model.id || '').trim();
+          if (id) {
+            defaultsById[id] = model;
+          }
+        });
         const existingModels = dedupeModels((providerModal.models || []).map(function (model) { return model.id; }));
         const existing = {};
         existingModels.forEach(function (model) { existing[model] = true; });
@@ -2257,6 +2316,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           sourceUrl: sourceUrl,
           selected: selected,
           existing: existing,
+          defaultsById: defaultsById,
           query: ''
         };
       }
@@ -2326,10 +2386,20 @@ export function getManagerHtml(webview: vscode.Webview): string {
         currentModels.forEach(function (model) { currentById[model.id] = model; });
         const selectedModels = modelPicker.models.filter(function (model) { return modelPicker.selected[model]; });
         providerModal.models = normalizeProviderModelConfigs(retainedModels.concat(selectedModels.map(function (id) {
-          return currentById[id] || { id: id };
+          return currentById[id] || defaultModelConfigForFetchedId(id);
         })));
         modelPicker = null;
         render();
+      }
+
+      function defaultModelConfigForFetchedId(id) {
+        const fetchedDefault = modelPicker && modelPicker.defaultsById ? modelPicker.defaultsById[id] : undefined;
+        return {
+          id: id,
+          contextWindow: optionalIntegerText(fetchedDefault && fetchedDefault.contextWindow) || defaultFetchedContextWindow,
+          compactThresholdPercent: optionalIntegerText(fetchedDefault && fetchedDefault.compactThresholdPercent) || defaultCompactThresholdPercent,
+          maxOutputTokens: optionalIntegerText(fetchedDefault && fetchedDefault.maxOutputTokens)
+        };
       }
 
       function toggleProviderApiKey(button) {
@@ -2693,18 +2763,16 @@ export function getManagerHtml(webview: vscode.Webview): string {
           return '';
         }
         const modelConfig = findProviderModelConfig(provider, selectedModels.ANTHROPIC_MODEL || firstConfiguredClaudeModel(selectedModels));
-        const compactThresholdPercent = modelConfig && modelConfig.compactThresholdPercent !== undefined
-          ? modelConfig.compactThresholdPercent
-          : runtimeSettings.autoCompactPctOverride;
         const rows = [
           managedPreviewRow(agent, 'env.ANTHROPIC_BASE_URL', agent.baseUrl, provider.claudeBaseUrl),
           managedPreviewRow(agent, 'env.ANTHROPIC_AUTH_TOKEN', agent.authToken, provider.apiKey)
         ].concat(claudeKeys.map(function (key) {
           return managedPreviewRow(agent, 'env.' + key, agent.models[key], selectedModels[key]);
         })).concat([
-          preservedPreviewRow('env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', agent.autoCompactWindow, modelConfig && modelConfig.contextWindow),
-          preservedPreviewRow('env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', agent.runtimeSettings.autoCompactPctOverride, compactThresholdPercent),
-          managedPreviewRow(agent, 'env.CLAUDE_CODE_MAX_OUTPUT_TOKENS', agent.maxOutputTokens, modelConfig && modelConfig.maxOutputTokens),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', agent.autoCompactWindow, modelConfig && modelConfig.contextWindow, undefined, !(modelConfig && modelConfig.contextWindow)),
+          managedPreviewRow(agent, 'env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', agent.runtimeSettings.autoCompactPctOverride, modelConfig && modelConfig.compactThresholdPercent, undefined, !(modelConfig && modelConfig.compactThresholdPercent !== undefined)),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_MAX_OUTPUT_TOKENS', agent.maxOutputTokens, modelConfig && modelConfig.maxOutputTokens, undefined, !(modelConfig && modelConfig.maxOutputTokens)),
+          managedPreviewRow(agent, 'effortLevel', agent.runtimeSettings.effortLevel, runtimeSettings.effortLevel),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_ATTRIBUTION_HEADER', claudeModeValue(agent.runtimeSettings.attributionHeader, '1', '0'), claudeModeValue(runtimeSettings.attributionHeader, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', claudeModeValue(agent.runtimeSettings.disableNonessentialTraffic, '1', '0'), claudeModeValue(runtimeSettings.disableNonessentialTraffic, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', claudeModeValue(agent.runtimeSettings.experimentalAgentTeams, '1', '0'), claudeModeValue(runtimeSettings.experimentalAgentTeams, '1', '0')),
@@ -2725,6 +2793,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const modelConfig = findProviderModelConfig(provider, selectedModel);
         const limits = modelConfig ? calculateModelLimitsClient(modelConfig) : {};
         const providerHasApiKey = Boolean(provider.apiKey && provider.apiKey.trim());
+        const nextContextWindow = modelConfig && modelConfig.contextWindow ? modelConfig.contextWindow : 372000;
+        const nextCompactAtTokens = modelConfig && modelConfig.contextWindow ? limits.compactAtTokens : 350000;
         const rows = [
           managedPreviewRow(agent, 'model_provider', agent.modelProvider, providerName),
           managedPreviewRow(agent, 'model', agent.model, selectedModel),
@@ -2732,9 +2802,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
           managedPreviewRow(agent, providerKey + '.base_url', hasCurrentBlock ? agent.providerBaseUrl : undefined, provider.codexBaseUrl),
           managedPreviewRow(agent, providerKey + '.wire_api', hasCurrentBlock ? agent.wireApi : undefined, provider.codexWireApi),
           managedPreviewRow(agent, providerKey + '.requires_openai_auth', hasCurrentBlock ? agent.requiresOpenAiAuth : undefined, providerHasApiKey),
-          managedPreviewRow(agent, 'model_context_window', agent.modelContextWindow, modelConfig && modelConfig.contextWindow),
-          managedPreviewRow(agent, 'model_auto_compact_token_limit', agent.modelAutoCompactTokenLimit, limits.compactAtTokens),
+          managedPreviewRow(agent, 'model_context_window', agent.modelContextWindow, nextContextWindow),
+          managedPreviewRow(agent, 'model_auto_compact_token_limit', agent.modelAutoCompactTokenLimit, nextCompactAtTokens, undefined, nextCompactAtTokens === undefined),
           managedPreviewRow(agent, 'service_tier', agent.runtimeSettings && agent.runtimeSettings.serviceTier, runtimeSettings.serviceTier),
+          managedPreviewRow(agent, 'model_reasoning_effort', agent.runtimeSettings && agent.runtimeSettings.modelReasoningEffort, runtimeSettings.modelReasoningEffort),
           managedPreviewRow(agent, 'sandbox_mode', agent.runtimeSettings && agent.runtimeSettings.sandboxMode, runtimeSettings.sandboxMode),
           managedPreviewRow(agent, 'approval_policy', agent.runtimeSettings && agent.runtimeSettings.approvalPolicy, runtimeSettings.approvalPolicy),
           managedPreviewRow(agent.auth, 'OPENAI_API_KEY', agent.openAiApiKey, providerHasApiKey ? provider.apiKey : undefined, 'auth.json.OPENAI_API_KEY', !providerHasApiKey)
@@ -2743,7 +2814,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-codex', disabled));
       }
 
-      function renderOpencodeChangePreview(agent, provider, selectedModel, disabled) {
+      function renderOpencodeChangePreview(agent, provider, selectedModel, runtimeSettings, disabled) {
         if (!provider) {
           return '';
         }
@@ -2761,7 +2832,8 @@ export function getManagerHtml(webview: vscode.Webview): string {
           managedPreviewRow(agent, providerKey + '.options.baseURL', hasCurrentBlock ? agent.providerBaseUrl : undefined, provider.opencodeBaseUrl),
           managedPreviewRow(agent, providerKey + '.options.apiKey', hasCurrentBlock ? agent.providerApiKey : undefined, provider.apiKey),
           ['provider.' + provider.key + '.models', countLabel(agent.providerModelCount), countLabel(nextModelCount), agent.providerModelCount === nextModelCount ? '保持不变' : '写入'],
-          managedPreviewRow(agent, 'compaction.reserved', agent.compactionReserved, limits.reserved),
+          managedPreviewRow(agent, 'compaction.reserved', agent.compactionReserved, limits.reserved, undefined, limits.reserved === undefined),
+          managedPreviewRow(agent, providerKey + '.models.' + selectedModel + '.options.reasoningEffort', agent.runtimeSettings && agent.runtimeSettings.reasoningEffort, runtimeSettings.reasoningEffort),
           ['当前模型 limit.context', valueLabel(agent.modelContextWindow), valueLabel(selectedConfig && selectedConfig.contextWindow), agent.modelContextWindow === (selectedConfig && selectedConfig.contextWindow) ? '保持不变' : '写入'],
           ['当前模型 limit.output', valueLabel(agent.maxOutputTokens), valueLabel(selectedConfig && selectedConfig.maxOutputTokens), agent.maxOutputTokens === (selectedConfig && selectedConfig.maxOutputTokens) ? '保持不变' : '写入']
         ];
@@ -2811,16 +2883,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         const managed = Boolean(forceDelete) || Boolean(agent && agent.managedPaths && agent.managedPaths.indexOf(path) >= 0);
         return [displayKey || path, current, managed ? '未配置' : current, managed && current !== '未配置' ? '删除' : '保持不变'];
-      }
-
-      function preservedPreviewRow(path, currentValue, desiredValue) {
-        if (desiredValue !== undefined && desiredValue !== null && desiredValue !== '') {
-          const current = valueLabel(currentValue);
-          const next = valueLabel(desiredValue);
-          return [path, current, next, current === next ? '保持不变' : '写入'];
-        }
-        const current = valueLabel(currentValue);
-        return [path, current, current, '保持不变'];
       }
 
       function claudeModeValue(mode, enabledValue, disabledValue) {
@@ -2941,12 +3003,6 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       function saveClaude() {
         const providerId = value('claudeProviderSelect');
-        const pctText = value('claudeAutoCompactPctOverride').trim();
-        const pctValue = pctText ? Number(pctText) : undefined;
-        if (pctValue !== undefined && (!Number.isInteger(pctValue) || pctValue < 1 || pctValue > 99)) {
-          toast('error', 'Claude 自动压缩比例覆盖必须是 1-99 的整数百分比。');
-          return;
-        }
         const models = {};
         claudeKeys.forEach(function (key) {
           models[key] = value('claudeModel_' + key);
@@ -2960,7 +3016,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
 
       function collectClaudeRuntimeSettings() {
         return {
-          autoCompactPctOverride: optionalIntegerValue('claudeAutoCompactPctOverride'),
+          effortLevel: value('claudeEffortLevel') || undefined,
           attributionHeader: value('claudeAttributionHeader') || 'unset',
           disableNonessentialTraffic: value('claudeDisableNonessentialTraffic') || 'unset',
           experimentalAgentTeams: value('claudeExperimentalAgentTeams') || 'unset',
@@ -2980,6 +3036,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function collectCodexRuntimeSettings() {
         return {
           serviceTier: value('codexServiceTier') || undefined,
+          modelReasoningEffort: value('codexModelReasoningEffort') || undefined,
           sandboxMode: value('codexSandboxMode') || undefined,
           approvalPolicy: value('codexApprovalPolicy') || undefined
         };
@@ -2988,8 +3045,15 @@ export function getManagerHtml(webview: vscode.Webview): string {
       function saveOpencode() {
         post('saveOpencode', {
           providerId: value('opencodeProviderSelect'),
-          model: value('opencodeModel')
+          model: value('opencodeModel'),
+          runtimeSettings: collectOpencodeRuntimeSettings()
         });
+      }
+
+      function collectOpencodeRuntimeSettings() {
+        return {
+          reasoningEffort: value('opencodeReasoningEffort') || undefined
+        };
       }
 
       function emptyProvider() {
@@ -3074,9 +3138,21 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return '<div class="field"><span class="label-line"><span>' + h(label) + '</span>' +
           '<span class="help-control" data-help-control="1">' +
             '<button type="button" class="help-icon" data-action="help-toggle" aria-label="查看' + attr(label) + '说明" aria-expanded="false" aria-controls="' + helpId + '">?</button>' +
-            '<span id="' + helpId + '" class="help-popover" data-help-popover="1" role="tooltip" hidden>' + h(help) + '</span>' +
+            '<span id="' + helpId + '" class="help-popover" data-help-popover="1" role="tooltip" hidden>' + helpContent(help) + '</span>' +
           '</span>' +
         '</span>' + control + '</div>';
+      }
+
+      function helpContent(help) {
+        const lines = String(help || '').split(/\\n+/).map(function (line) {
+          return line.trim().replace(/^[-*]\\s+/, '');
+        }).filter(Boolean);
+        if (lines.length <= 1) {
+          return h(lines[0] || '');
+        }
+        return '<ul>' + lines.map(function (line) {
+          return '<li>' + h(line) + '</li>';
+        }).join('') + '</ul>';
       }
 
       function truncateModelOption(label) {

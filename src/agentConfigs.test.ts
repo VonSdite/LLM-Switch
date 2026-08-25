@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import Module from 'node:module';
 import test from 'node:test';
 import * as TOML from '@iarna/toml';
-import { CLAUDE_MODEL_KEYS, ProviderConfig, SaveClaudePayload, SaveCodexPayload } from './types';
+import { CLAUDE_MODEL_KEYS, ProviderConfig, SaveClaudePayload, SaveCodexPayload, SaveOpencodePayload } from './types';
 
 interface FakeUri {
   fsPath: string;
@@ -65,7 +65,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
         ANTHROPIC_REASONING_MODEL: 'glm-5.3[1m]'
       },
       runtimeSettings: {
-        autoCompactPctOverride: 95,
+        effortLevel: 'xhigh',
         attributionHeader: 'disabled',
         disableNonessentialTraffic: 'enabled',
         experimentalAgentTeams: 'enabled',
@@ -78,18 +78,27 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
       model: 'glm-5.3',
       runtimeSettings: {
         serviceTier: 'priority',
+        modelReasoningEffort: 'high',
         sandboxMode: 'workspace-write',
         approvalPolicy: 'on-request'
+      }
+    };
+    const opencodePayload: SaveOpencodePayload = {
+      providerId: provider.id,
+      model: 'glm-5.3',
+      runtimeSettings: {
+        reasoningEffort: 'medium'
       }
     };
 
     await agentConfigs.saveClaudeConfig(context, [provider], claudePayload);
     await agentConfigs.saveCodexConfig(context, [provider], codexPayload);
-    await agentConfigs.saveOpencodeConfig(context, [provider], { providerId: provider.id, model: 'glm-5.3' });
+    await agentConfigs.saveOpencodeConfig(context, [provider], opencodePayload);
 
     const claude = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
     const claudeEnv = claude.env as Record<string, unknown>;
     assert.equal(claude.autoCompactWindow, undefined);
+    assert.equal(claude.effortLevel, 'xhigh');
     assert.equal(claudeEnv.ANTHROPIC_MODEL, 'glm-5.3[1m]');
     assert.equal(claudeEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
     assert.equal(claudeEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
@@ -114,13 +123,15 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(codex.model_context_window, 1_048_576);
     assert.equal(codex.model_auto_compact_token_limit, 838_860);
     assert.equal(codex.service_tier, 'priority');
+    assert.equal(codex.model_reasoning_effort, 'high');
     assert.equal(codex.sandbox_mode, 'workspace-write');
     assert.equal(codex.approval_policy, 'on-request');
     const agents = await agentConfigs.readAgentsState(context, [provider]);
     assert.equal(agents.claude.autoCompactWindow, 1_048_576);
-    assert.equal(agents.claude.runtimeSettings.autoCompactPctOverride, 80);
+    assert.equal(agents.claude.runtimeSettings.effortLevel, 'xhigh');
     assert.equal(agents.claude.maxOutputTokens, 131_072);
     assert.deepEqual(agents.codex.runtimeSettings, codexPayload.runtimeSettings);
+    assert.deepEqual(agents.opencode.runtimeSettings, opencodePayload.runtimeSettings);
     const codexProviders = codex.model_providers as Record<string, Record<string, unknown>>;
     assert.equal(codexProviders['provider-one'].requires_openai_auth, true);
     const codexAuth = JSON.parse(await fs.readFile(codexAuthPath, 'utf8')) as Record<string, unknown>;
@@ -129,6 +140,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     await agentConfigs.saveCodexConfig(context, [provider], { ...codexPayload, runtimeSettings: {} });
     const codexWithoutRuntimeSettings = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     assert.equal(codexWithoutRuntimeSettings.service_tier, undefined);
+    assert.equal(codexWithoutRuntimeSettings.model_reasoning_effort, undefined);
     assert.equal(codexWithoutRuntimeSettings.sandbox_mode, undefined);
     assert.equal(codexWithoutRuntimeSettings.approval_policy, undefined);
     await agentConfigs.saveCodexConfig(context, [provider], codexPayload);
@@ -139,7 +151,8 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const opencodeModels = opencodeProviders['provider-one'].models as Record<string, unknown>;
     assert.deepEqual(opencodeModels['glm-5.3'], {
       name: 'glm-5.3',
-      limit: { context: 1_048_576, output: 131_072 }
+      limit: { context: 1_048_576, output: 131_072 },
+      options: { reasoningEffort: 'medium' }
     });
 
     claudeEnv.ANTHROPIC_AUTH_TOKEN = 'user-edited-token';
@@ -148,6 +161,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     await agentConfigs.saveClaudeConfig(context, [providerWithoutKey], {
       ...claudePayload,
       runtimeSettings: {
+        effortLevel: undefined,
         attributionHeader: 'unset',
         disableNonessentialTraffic: 'unset',
         experimentalAgentTeams: 'unset',
@@ -191,8 +205,9 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const claudeWithoutCompact = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
     const claudeWithoutCompactEnv = claudeWithoutCompact.env as Record<string, unknown>;
     assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
-    assert.equal(claudeWithoutCompactEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
+    assert.equal(claudeWithoutCompactEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, undefined);
     assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '131072');
+    assert.equal(claudeWithoutCompact.effortLevel, undefined);
     const codexWithoutCompact = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     assert.equal(codexWithoutCompact.model_context_window, 1_048_576);
     assert.equal(codexWithoutCompact.model_auto_compact_token_limit, undefined);
@@ -239,9 +254,17 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     });
     const claudeWithoutLimits = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
     const claudeWithoutLimitsEnv = claudeWithoutLimits.env as Record<string, unknown>;
-    assert.equal(claudeWithoutLimitsEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
-    assert.equal(claudeWithoutLimitsEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
+    assert.equal(claudeWithoutLimitsEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, undefined);
+    assert.equal(claudeWithoutLimitsEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, undefined);
     assert.equal(claudeWithoutLimitsEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, undefined);
+    await agentConfigs.saveCodexConfig(context, [providerWithoutLimits], {
+      providerId: provider.id,
+      model: 'context-only',
+      runtimeSettings: {}
+    });
+    const codexWithoutLimits = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
+    assert.equal(codexWithoutLimits.model_context_window, 372_000);
+    assert.equal(codexWithoutLimits.model_auto_compact_token_limit, 350_000);
     await agentConfigs.saveOpencodeConfig(context, [providerWithoutLimits], {
       providerId: provider.id,
       model: 'context-only'
