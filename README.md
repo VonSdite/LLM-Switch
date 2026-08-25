@@ -137,7 +137,7 @@ Codex 页面还会写入 `auth.json`：
 - `OPENAI_API_KEY`
 
 Codex 的 `model_provider` 和 `[model_providers.<provider>]` 使用 Provider 名称。
-Provider 配置了 API key 时，`requires_openai_auth` 写入 `true`；API key 为空时写入 `false`。
+Provider 配置了 API key 时，`requires_openai_auth` 写入 `true`；API key 为空时写入 `false`，并清理 `auth.json` 中的 `OPENAI_API_KEY`。
 
 Codex 使用所选模型的上下文窗口。上下文窗口和压缩阈值都已填写时，插件计算 `model_auto_compact_token_limit`；未选择压缩阈值时，插件清理自己管理的自动压缩字段。
 

@@ -2724,19 +2724,20 @@ export function getManagerHtml(webview: vscode.Webview): string {
         const hasCurrentBlock = agent.modelProvider === providerName;
         const modelConfig = findProviderModelConfig(provider, selectedModel);
         const limits = modelConfig ? calculateModelLimitsClient(modelConfig) : {};
+        const providerHasApiKey = Boolean(provider.apiKey && provider.apiKey.trim());
         const rows = [
           managedPreviewRow(agent, 'model_provider', agent.modelProvider, providerName),
           managedPreviewRow(agent, 'model', agent.model, selectedModel),
           managedPreviewRow(agent, providerKey + '.name', hasCurrentBlock ? agent.providerName : undefined, provider.name),
           managedPreviewRow(agent, providerKey + '.base_url', hasCurrentBlock ? agent.providerBaseUrl : undefined, provider.codexBaseUrl),
           managedPreviewRow(agent, providerKey + '.wire_api', hasCurrentBlock ? agent.wireApi : undefined, provider.codexWireApi),
-          managedPreviewRow(agent, providerKey + '.requires_openai_auth', hasCurrentBlock ? agent.requiresOpenAiAuth : undefined, Boolean(provider.apiKey)),
+          managedPreviewRow(agent, providerKey + '.requires_openai_auth', hasCurrentBlock ? agent.requiresOpenAiAuth : undefined, providerHasApiKey),
           managedPreviewRow(agent, 'model_context_window', agent.modelContextWindow, modelConfig && modelConfig.contextWindow),
           managedPreviewRow(agent, 'model_auto_compact_token_limit', agent.modelAutoCompactTokenLimit, limits.compactAtTokens),
           managedPreviewRow(agent, 'service_tier', agent.runtimeSettings && agent.runtimeSettings.serviceTier, runtimeSettings.serviceTier),
           managedPreviewRow(agent, 'sandbox_mode', agent.runtimeSettings && agent.runtimeSettings.sandboxMode, runtimeSettings.sandboxMode),
           managedPreviewRow(agent, 'approval_policy', agent.runtimeSettings && agent.runtimeSettings.approvalPolicy, runtimeSettings.approvalPolicy),
-          managedPreviewRow(agent.auth, 'OPENAI_API_KEY', agent.openAiApiKey, provider.apiKey, 'auth.json.OPENAI_API_KEY')
+          managedPreviewRow(agent.auth, 'OPENAI_API_KEY', agent.openAiApiKey, providerHasApiKey ? provider.apiKey : undefined, 'auth.json.OPENAI_API_KEY', !providerHasApiKey)
         ];
 
         return renderChangePreview('保存预览', 'Provider: ' + provider.name, rows, saveButton('save-codex', disabled));
@@ -2801,14 +2802,14 @@ export function getManagerHtml(webview: vscode.Webview): string {
         return text ? text : '未配置';
       }
 
-      function managedPreviewRow(agent, path, currentValue, desiredValue, displayKey) {
+      function managedPreviewRow(agent, path, currentValue, desiredValue, displayKey, forceDelete) {
         const current = valueLabel(currentValue);
         const hasDesired = desiredValue !== undefined && desiredValue !== null && desiredValue !== '';
         if (hasDesired) {
           const next = valueLabel(desiredValue);
           return [displayKey || path, current, next, current === next ? '保持不变' : '写入'];
         }
-        const managed = Boolean(agent && agent.managedPaths && agent.managedPaths.indexOf(path) >= 0);
+        const managed = Boolean(forceDelete) || Boolean(agent && agent.managedPaths && agent.managedPaths.indexOf(path) >= 0);
         return [displayKey || path, current, managed ? '未配置' : current, managed && current !== '未配置' ? '删除' : '保持不变'];
       }
 

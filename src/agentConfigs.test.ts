@@ -166,8 +166,8 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const codexWithoutKey = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     const codexWithoutKeyProviders = codexWithoutKey.model_providers as Record<string, Record<string, unknown>>;
     assert.equal(codexWithoutKeyProviders['provider-one'].requires_openai_auth, false);
-    const preservedCodexAuth = JSON.parse(await fs.readFile(codexAuthPath, 'utf8')) as Record<string, unknown>;
-    assert.equal(preservedCodexAuth.OPENAI_API_KEY, 'user-edited-key');
+    const codexAuthWithoutKey = JSON.parse(await fs.readFile(codexAuthPath, 'utf8')) as Record<string, unknown>;
+    assert.equal(codexAuthWithoutKey.OPENAI_API_KEY, undefined);
 
     const providerWithoutCompact = {
       ...providerWithoutKey,

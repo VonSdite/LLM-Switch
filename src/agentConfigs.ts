@@ -121,13 +121,14 @@ export async function saveCodexConfig(context: vscode.ExtensionContext, provider
   const authPath = await getCodexAuthConfigPath(context);
   const auth = await readJsonConfig(authPath, {});
   const providerName = provider.name;
+  const providerHasApiKey = Boolean(provider.apiKey.trim());
   const configDesired: ManagedField[] = [
     managedField(['model_provider'], providerName),
     managedField(['model'], model),
     managedField(['model_providers', providerName, 'name'], provider.name),
     managedField(['model_providers', providerName, 'base_url'], provider.codexBaseUrl),
     managedField(['model_providers', providerName, 'wire_api'], provider.codexWireApi),
-    managedField(['model_providers', providerName, 'requires_openai_auth'], Boolean(provider.apiKey))
+    managedField(['model_providers', providerName, 'requires_openai_auth'], providerHasApiKey)
   ];
   const modelConfig = findProviderModel(provider, model);
   if (modelConfig?.contextWindow) {
@@ -147,7 +148,10 @@ export async function saveCodexConfig(context: vscode.ExtensionContext, provider
   if (runtimeSettings.approvalPolicy) {
     configDesired.push(managedField(['approval_policy'], runtimeSettings.approvalPolicy));
   }
-  const authDesired = provider.apiKey ? [managedField(['OPENAI_API_KEY'], provider.apiKey)] : [];
+  const authDesired = providerHasApiKey ? [managedField(['OPENAI_API_KEY'], provider.apiKey)] : [];
+  if (!providerHasApiKey) {
+    delete auth.OPENAI_API_KEY;
+  }
   const configTargetId = managedTargetId('codex', filePath);
   const authTargetId = managedTargetId('codexAuth', authPath);
   reconcileManagedFields(config, await readManagedFields(context, configTargetId), configDesired);
