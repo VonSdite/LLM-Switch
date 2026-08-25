@@ -99,10 +99,12 @@ export function defaultFetchedModelConfig(id: string): ProviderModelConfig {
   const suggestedContextWindow = suggestions.matchKind === 'fallback'
     ? DEFAULT_FETCHED_CONTEXT_WINDOW
     : suggestions.contextWindow[0]?.value;
+  const suggestedMaxOutputTokens = suggestions.maxOutputTokens[0]?.value;
   return {
     id,
     contextWindow: suggestedContextWindow ?? DEFAULT_FETCHED_CONTEXT_WINDOW,
-    compactThresholdPercent: DEFAULT_COMPACT_THRESHOLD_PERCENT
+    compactThresholdPercent: DEFAULT_COMPACT_THRESHOLD_PERCENT,
+    maxOutputTokens: suggestedMaxOutputTokens
   };
 }
 

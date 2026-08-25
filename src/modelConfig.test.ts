@@ -38,9 +38,9 @@ test('拉取模型按 ID 保留参数并为新模型补默认参数', () => {
     maxOutputTokens: 131_072
   }], ['glm-5.3', 'glm-5.2', 'unknown-model']);
   assert.deepEqual(merged, [
-    { id: 'glm-5.2', contextWindow: 1_000_000, compactThresholdPercent: 60, maxOutputTokens: undefined },
+    { id: 'glm-5.2', contextWindow: 1_000_000, compactThresholdPercent: 60, maxOutputTokens: 131_072 },
     { id: 'glm-5.3', contextWindow: 1_048_576, compactThresholdPercent: 75, maxOutputTokens: 131_072 },
-    { id: 'unknown-model', contextWindow: 200_000, compactThresholdPercent: 60, maxOutputTokens: undefined }
+    { id: 'unknown-model', contextWindow: 200_000, compactThresholdPercent: 60, maxOutputTokens: 32_000 }
   ]);
 });
 
