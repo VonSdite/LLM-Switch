@@ -1129,8 +1129,9 @@ export function getManagerHtml(webview: vscode.Webview): string {
       const defaultCompactThresholdPercent = 60;
       const defaultFetchedContextWindow = 200000;
       const defaultOpencodeNpm = '@ai-sdk/openai-compatible';
-      const claudeEffortLevels = ['low', 'medium', 'high', 'xhigh'];
-      const reasoningEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+      const claudeEffortLevels = ['low', 'medium', 'high', 'xhigh', 'max'];
+      const reasoningEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+      const opencodeReasoningEfforts = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
       const restored = vscode.getState() || {};
       const providerNameRule = '只允许英文字母、数字、下划线和中划线，长度 1-64，且必须以字母或数字开头。名称需唯一。';
       let activeTab = restored.activeTab || 'providers';
@@ -2038,7 +2039,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
             fieldGroup('model', modelSelect('opencodeModel', provider, selectedModel, disabled)) +
             '<h3 class="section-title">运行设置</h3>' +
             '<div class="runtime-grid">' +
-              opencodeRuntimeField('opencodeReasoningEffort', 'Reasoning effort', 'reasoningEffort', runtimeSettings.reasoningEffort, reasoningEfforts.map(function (value) {
+              opencodeRuntimeField('opencodeReasoningEffort', 'Reasoning effort', 'reasoningEffort', runtimeSettings.reasoningEffort, opencodeReasoningEfforts.map(function (value) {
                 return [value, value];
               }), '- 写入所选模型的 options.reasoningEffort。\\n- 不设置时清理所选模型里插件管理的 reasoningEffort。') +
             '</div>' +

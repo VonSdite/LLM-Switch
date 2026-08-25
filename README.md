@@ -118,7 +118,7 @@ Claude 页面还会写入 `settings.json` 顶层字段：
 
 Claude 使用主模型的参数更新 env。上下文窗口写入 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，压缩阈值写入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，最大输出写入 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。模型未配置上下文窗口、压缩阈值或最大输出时，插件清理对应配置。
 
-运行设置使用“不设置 / 启用 / 禁用”或“不设置 / effort 值”选择，配置中缺少对应字段时默认选择“不设置”。`effortLevel` 支持 `low`、`medium`、`high`、`xhigh`。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
+运行设置使用“不设置 / 启用 / 禁用”或“不设置 / effort 值”选择，配置中缺少对应字段时默认选择“不设置”。`effortLevel` 支持 `low`、`medium`、`high`、`xhigh`、`max`。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
 
 ### Codex
 
@@ -147,7 +147,7 @@ Provider 配置了 API key 时，`requires_openai_auth` 写入 `true`；API key 
 
 Codex 使用所选模型的上下文窗口。上下文窗口和压缩阈值都已填写时，插件计算 `model_auto_compact_token_limit`；模型未配置上下文窗口时，插件写入 `model_context_window = 372000` 和 `model_auto_compact_token_limit = 350000`。Codex 不写入最大输出窗口配置。
 
-Codex 运行设置默认选择“不设置”。`service_tier` 支持 `auto`、`default`、`flex`、`priority`；`model_reasoning_effort` 支持 `minimal`、`low`、`medium`、`high`、`xhigh`；`sandbox_mode` 支持 `read-only`、`workspace-write`、`danger-full-access`；`approval_policy` 支持 `untrusted`、`on-request`、`never`。
+Codex 运行设置默认选择“不设置”。`service_tier` 支持 `auto`、`default`、`flex`、`priority`；`model_reasoning_effort` 支持 `minimal`、`low`、`medium`、`high`、`xhigh`、`max`；`sandbox_mode` 支持 `read-only`、`workspace-write`、`danger-full-access`；`approval_policy` 支持 `untrusted`、`on-request`、`never`。
 
 ### opencode
 
@@ -172,7 +172,7 @@ opencode 使用以下换算：
 compaction.reserved = contextWindow - floor(contextWindow × compactThresholdPercent / 100)
 ```
 
-opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时仍写入模型 ID，但不生成 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时清理压缩配置。所选模型的 `reasoningEffort` 支持 `minimal`、`low`、`medium`、`high`、`xhigh`。
+opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时仍写入模型 ID，但不生成 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时清理压缩配置。所选模型的 `reasoningEffort` 支持 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。
 
 ## 快速切换模型
 

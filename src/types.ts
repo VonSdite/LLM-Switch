@@ -2,11 +2,14 @@ export type AgentName = 'claude' | 'codex' | 'opencode';
 export type ProxyMode = 'direct' | 'system' | 'custom';
 export type CodexWireApi = 'responses' | 'chat';
 
-export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ClaudeEffortLevel = typeof CLAUDE_EFFORT_LEVELS[number];
 
-export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = typeof REASONING_EFFORTS[number];
+
+export const OPENCODE_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type OpencodeReasoningEffort = typeof OPENCODE_REASONING_EFFORTS[number];
 
 export const CLAUDE_MODEL_KEYS = [
   'ANTHROPIC_DEFAULT_HAIKU_MODEL',
@@ -49,7 +52,7 @@ export interface CodexRuntimeSettings {
 }
 
 export interface OpencodeRuntimeSettings {
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort?: OpencodeReasoningEffort;
 }
 
 export interface ProviderConfig {

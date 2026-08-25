@@ -22,6 +22,8 @@ import {
   ClaudeEffortLevel,
   CodexAgentState,
   OpencodeAgentState,
+  OPENCODE_REASONING_EFFORTS,
+  OpencodeReasoningEffort,
   ProviderConfig,
   ProviderModelConfig,
   REASONING_EFFORTS,
@@ -358,7 +360,7 @@ async function quickSwitchAgentModel(context: vscode.ExtensionContext, agent: Ag
     });
     return true;
   }
-  const reasoningEffort = await pickReasoningEffort('opencode', agents.opencode.runtimeSettings.reasoningEffort);
+  const reasoningEffort = await pickOpencodeReasoningEffort(agents.opencode.runtimeSettings.reasoningEffort);
   if (reasoningEffort === null) {
     return false;
   }
@@ -427,7 +429,7 @@ async function setAgentEffort(context: vscode.ExtensionContext, agent: AgentName
     await vscode.window.showWarningMessage('LLM-Switch: 当前 opencode 未配置模型，请先在 Agents 页面选择模型。');
     return false;
   }
-  const reasoningEffort = await pickReasoningEffort('opencode', agents.opencode.runtimeSettings.reasoningEffort);
+  const reasoningEffort = await pickOpencodeReasoningEffort(agents.opencode.runtimeSettings.reasoningEffort);
   if (reasoningEffort === null) {
     return false;
   }
@@ -449,6 +451,10 @@ async function pickClaudeEffort(current: ClaudeEffortLevel | undefined): Promise
 
 async function pickReasoningEffort(label: string, current: ReasoningEffort | undefined): Promise<ReasoningEffort | undefined | null> {
   return pickEffort(`${label} reasoning effort`, REASONING_EFFORTS, current);
+}
+
+async function pickOpencodeReasoningEffort(current: OpencodeReasoningEffort | undefined): Promise<OpencodeReasoningEffort | undefined | null> {
+  return pickEffort('opencode reasoning effort', OPENCODE_REASONING_EFFORTS, current);
 }
 
 async function pickEffort<T extends string>(title: string, values: readonly T[], current: T | undefined): Promise<T | undefined | null> {

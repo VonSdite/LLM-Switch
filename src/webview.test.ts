@@ -88,7 +88,7 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
         autoCompactWindow: 1_048_576,
         maxOutputTokens: 131_072,
         runtimeSettings: {
-          effortLevel: 'xhigh',
+          effortLevel: 'max',
           attributionHeader: 'unset',
           disableNonessentialTraffic: 'unset',
           experimentalAgentTeams: 'unset',
@@ -112,7 +112,8 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
   assert.match(harness.app.innerHTML, /class="help-icon" data-action="help-toggle"/);
   assert.match(harness.app.innerHTML, /data-help-popover="1" role="tooltip" hidden/);
   assert.doesNotMatch(harness.app.innerHTML, /class="help-icon" title=/);
-  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeEffortLevel'), 'xhigh');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeEffortLevel'), 'max');
+  assert.equal(optionLabelsByValue(harness.app.innerHTML, 'claudeEffortLevel').max, 'max');
   assert.match(harness.app.innerHTML, /<span>非必要流量<\/span>/);
   assert.doesNotMatch(harness.app.innerHTML, /<span>禁用非必要流量<\/span>/);
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'claudeAttributionHeader'), 'unset');
@@ -156,7 +157,7 @@ test('Codex 页面支持 service tier、reasoning effort、沙箱和审批策略
       claude: {},
       codex: codexAgentFixture({
         serviceTier: 'priority',
-        modelReasoningEffort: 'high',
+        modelReasoningEffort: 'max',
         sandboxMode: 'workspace-write',
         approvalPolicy: 'on-request'
       }),
@@ -165,7 +166,7 @@ test('Codex 页面支持 service tier、reasoning effort、沙箱和审批策略
   });
 
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexServiceTier'), 'priority');
-  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexModelReasoningEffort'), 'high');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexModelReasoningEffort'), 'max');
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexSandboxMode'), 'workspace-write');
   assert.equal(selectedOptionValue(harness.app.innerHTML, 'codexApprovalPolicy'), 'on-request');
   assert.match(harness.app.innerHTML, /service_tier/);
@@ -201,7 +202,7 @@ test('opencode 模型参数留空时仍可保存', () => {
         model: 'private-model',
         providerModelCount: 1,
         runtimeSettings: {
-          reasoningEffort: 'medium'
+          reasoningEffort: 'none'
         },
         managedPaths: []
       }
@@ -212,7 +213,8 @@ test('opencode 模型参数留空时仍可保存', () => {
   assert.match(harness.app.innerHTML, /<button data-action="save-opencode" >保存<\/button>/);
   assert.match(harness.app.innerHTML, /1 个模型/);
   assert.match(harness.app.innerHTML, /2 个模型/);
-  assert.equal(selectedOptionValue(harness.app.innerHTML, 'opencodeReasoningEffort'), 'medium');
+  assert.equal(selectedOptionValue(harness.app.innerHTML, 'opencodeReasoningEffort'), 'none');
+  assert.equal(optionLabelsByValue(harness.app.innerHTML, 'opencodeReasoningEffort').max, 'max');
   assert.match(harness.app.innerHTML, /options\.reasoningEffort/);
 });
 

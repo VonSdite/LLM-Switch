@@ -20,8 +20,10 @@ import {
   CodexRuntimeSettings,
   CodexSandboxMode,
   CodexServiceTier,
-  OpencodeRuntimeSettings,
   OpencodeAgentState,
+  OPENCODE_REASONING_EFFORTS,
+  OpencodeReasoningEffort,
+  OpencodeRuntimeSettings,
   ProviderConfig,
   REASONING_EFFORTS,
   ReasoningEffort,
@@ -225,7 +227,7 @@ export async function saveOpencodeConfig(context: vscode.ExtensionContext, provi
     if (configuredModel.maxOutputTokens) {
       limit.output = configuredModel.maxOutputTokens;
     }
-    const modelDefinition: { name: string; limit?: typeof limit; options?: { reasoningEffort?: ReasoningEffort } } = {
+    const modelDefinition: { name: string; limit?: typeof limit; options?: { reasoningEffort?: OpencodeReasoningEffort } } = {
       name: configuredModel.id
     };
     if (Object.keys(limit).length > 0) {
@@ -441,7 +443,7 @@ async function readOpencodeState(context: vscode.ExtensionContext, providers: Pr
       maxOutputTokens: numberOrNull(selectedLimit.output),
       compactionReserved: numberOrNull(objectValue(config.compaction).reserved),
       runtimeSettings: {
-        reasoningEffort: knownString(selectedModelOptions.reasoningEffort, REASONING_EFFORTS)
+        reasoningEffort: knownString(selectedModelOptions.reasoningEffort, OPENCODE_REASONING_EFFORTS)
       },
       managedPaths: await readManagedPaths(context, targetId, config)
     };
@@ -636,7 +638,7 @@ function normalizeCodexRuntimeSettings(value: unknown): CodexRuntimeSettings {
 function normalizeOpencodeRuntimeSettings(value: unknown): OpencodeRuntimeSettings {
   const raw = objectValue(value);
   return {
-    reasoningEffort: optionalKnownString(raw.reasoningEffort, REASONING_EFFORTS, 'opencode reasoningEffort')
+    reasoningEffort: optionalKnownString(raw.reasoningEffort, OPENCODE_REASONING_EFFORTS, 'opencode reasoningEffort')
   };
 }
 

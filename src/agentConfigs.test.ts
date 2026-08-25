@@ -65,7 +65,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
         ANTHROPIC_REASONING_MODEL: 'glm-5.3[1m]'
       },
       runtimeSettings: {
-        effortLevel: 'xhigh',
+        effortLevel: 'max',
         attributionHeader: 'disabled',
         disableNonessentialTraffic: 'enabled',
         experimentalAgentTeams: 'enabled',
@@ -78,7 +78,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
       model: 'glm-5.3',
       runtimeSettings: {
         serviceTier: 'priority',
-        modelReasoningEffort: 'high',
+        modelReasoningEffort: 'max',
         sandboxMode: 'workspace-write',
         approvalPolicy: 'on-request'
       }
@@ -87,7 +87,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
       providerId: provider.id,
       model: 'glm-5.3',
       runtimeSettings: {
-        reasoningEffort: 'medium'
+        reasoningEffort: 'max'
       }
     };
 
@@ -98,7 +98,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const claude = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
     const claudeEnv = claude.env as Record<string, unknown>;
     assert.equal(claude.autoCompactWindow, undefined);
-    assert.equal(claude.effortLevel, 'xhigh');
+    assert.equal(claude.effortLevel, 'max');
     assert.equal(claudeEnv.ANTHROPIC_MODEL, 'glm-5.3[1m]');
     assert.equal(claudeEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
     assert.equal(claudeEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
@@ -123,12 +123,12 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(codex.model_context_window, 1_048_576);
     assert.equal(codex.model_auto_compact_token_limit, 838_860);
     assert.equal(codex.service_tier, 'priority');
-    assert.equal(codex.model_reasoning_effort, 'high');
+    assert.equal(codex.model_reasoning_effort, 'max');
     assert.equal(codex.sandbox_mode, 'workspace-write');
     assert.equal(codex.approval_policy, 'on-request');
     const agents = await agentConfigs.readAgentsState(context, [provider]);
     assert.equal(agents.claude.autoCompactWindow, 1_048_576);
-    assert.equal(agents.claude.runtimeSettings.effortLevel, 'xhigh');
+    assert.equal(agents.claude.runtimeSettings.effortLevel, 'max');
     assert.equal(agents.claude.maxOutputTokens, 131_072);
     assert.deepEqual(agents.codex.runtimeSettings, codexPayload.runtimeSettings);
     assert.deepEqual(agents.opencode.runtimeSettings, opencodePayload.runtimeSettings);
@@ -152,7 +152,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.deepEqual(opencodeModels['glm-5.3'], {
       name: 'glm-5.3',
       limit: { context: 1_048_576, output: 131_072 },
-      options: { reasoningEffort: 'medium' }
+      options: { reasoningEffort: 'max' }
     });
 
     claudeEnv.ANTHROPIC_AUTH_TOKEN = 'user-edited-token';
