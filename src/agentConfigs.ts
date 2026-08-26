@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { parse as parseJsonc, ParseError, printParseErrorCode } from 'jsonc-parser';
 import { ConfigPathTarget, getAgentConfigPath, getAgentConfigPathInfo, getCodexAuthConfigPath, getCodexAuthConfigPathInfo, getConfigPath } from './configPaths';
 import { ManagedField, managedTargetId, readManagedFields, readManagedPaths, reconcileManagedFields, updateManagedFields } from './managedAgentConfig';
-import { calculateModelLimits } from './modelPresets';
+import { calculateModelLimits, claudeCodeMaxOutputTokens } from './modelPresets';
 import { findProvider, findProviderModel } from './providerStore';
 import {
   AgentsState,
@@ -98,8 +98,9 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
   } else {
     delete objectValue(config.env).CLAUDE_AUTOCOMPACT_PCT_OVERRIDE;
   }
-  if (modelConfig?.maxOutputTokens) {
-    desired.push(managedField(['env', 'CLAUDE_CODE_MAX_OUTPUT_TOKENS'], String(modelConfig.maxOutputTokens)));
+  const maxOutputTokens = claudeCodeMaxOutputTokens(modelConfig?.maxOutputTokens);
+  if (maxOutputTokens) {
+    desired.push(managedField(['env', 'CLAUDE_CODE_MAX_OUTPUT_TOKENS'], String(maxOutputTokens)));
   } else {
     delete objectValue(config.env).CLAUDE_CODE_MAX_OUTPUT_TOKENS;
   }

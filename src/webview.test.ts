@@ -154,7 +154,7 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
           ANTHROPIC_REASONING_MODEL: 'glm-5.3[1m]'
         },
         autoCompactWindow: 1_048_576,
-        maxOutputTokens: 131_072,
+        maxOutputTokens: 64_000,
         runtimeSettings: {
           effortLevel: 'max',
           attributionHeader: 'unset',
@@ -176,7 +176,8 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
   assert.match(harness.app.innerHTML, /CLAUDE_CODE_AUTO_COMPACT_WINDOW/);
   assert.match(harness.app.innerHTML, /CLAUDE_CODE_MAX_OUTPUT_TOKENS/);
   assert.match(harness.app.innerHTML, /1048576/);
-  assert.match(harness.app.innerHTML, /131072/);
+  assert.match(harness.app.innerHTML, /64000/);
+  assert.doesNotMatch(harness.app.innerHTML, /131072/);
   assert.match(harness.app.innerHTML, /class="help-icon" data-action="help-toggle"/);
   assert.match(harness.app.innerHTML, /data-help-popover="1" role="tooltip" hidden/);
   assert.doesNotMatch(harness.app.innerHTML, /class="help-icon" title=/);

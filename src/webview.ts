@@ -1128,6 +1128,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       ];
       const defaultCompactThresholdPercent = 60;
       const defaultFetchedContextWindow = 200000;
+      const claudeCodeMaxOutputTokensLimit = 64000;
       const defaultOpencodeNpm = '@ai-sdk/openai-compatible';
       const claudeEffortLevels = ['low', 'medium', 'high', 'xhigh', 'max'];
       const reasoningEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -2782,7 +2783,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
         })).concat([
           managedPreviewRow(agent, 'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', agent.autoCompactWindow, modelConfig && modelConfig.contextWindow, undefined, !(modelConfig && modelConfig.contextWindow)),
           managedPreviewRow(agent, 'env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', agent.runtimeSettings.autoCompactPctOverride, modelConfig && modelConfig.compactThresholdPercent, undefined, !(modelConfig && modelConfig.compactThresholdPercent !== undefined)),
-          managedPreviewRow(agent, 'env.CLAUDE_CODE_MAX_OUTPUT_TOKENS', agent.maxOutputTokens, modelConfig && modelConfig.maxOutputTokens, undefined, !(modelConfig && modelConfig.maxOutputTokens)),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_MAX_OUTPUT_TOKENS', agent.maxOutputTokens, claudeCodeMaxOutputTokens(modelConfig && modelConfig.maxOutputTokens), undefined, !(modelConfig && modelConfig.maxOutputTokens)),
           managedPreviewRow(agent, 'effortLevel', agent.runtimeSettings.effortLevel, runtimeSettings.effortLevel),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_ATTRIBUTION_HEADER', claudeModeValue(agent.runtimeSettings.attributionHeader, '1', '0'), claudeModeValue(runtimeSettings.attributionHeader, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', claudeModeValue(agent.runtimeSettings.disableNonessentialTraffic, '1', '0'), claudeModeValue(runtimeSettings.disableNonessentialTraffic, '1', '0')),
@@ -2925,6 +2926,10 @@ export function getManagerHtml(webview: vscode.Webview): string {
         }
         const compactAtTokens = Math.floor(model.contextWindow * model.compactThresholdPercent / 100);
         return { compactAtTokens: compactAtTokens, reserved: model.contextWindow - compactAtTokens };
+      }
+
+      function claudeCodeMaxOutputTokens(value) {
+        return value ? Math.min(value, claudeCodeMaxOutputTokensLimit) : undefined;
       }
 
       function booleanLabel(value) {

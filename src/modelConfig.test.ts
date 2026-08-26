@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { reconcileManagedFields } from './managedFields';
-import { baseClaudeModelId, calculateModelLimits, claudeModelVariants, getModelParameterSuggestions } from './modelPresets';
+import { CLAUDE_CODE_MAX_OUTPUT_TOKENS_LIMIT, baseClaudeModelId, calculateModelLimits, claudeCodeMaxOutputTokens, claudeModelVariants, getModelParameterSuggestions } from './modelPresets';
 import { mergeFetchedModels, normalizeProviderModels } from './providerModels';
 
 test('旧字符串模型迁移后只保留模型 ID', () => {
@@ -73,6 +73,12 @@ test('GPT 内置候选使用 85 压缩阈值', () => {
 test('Claude 1M 后缀归一化且不会重复追加', () => {
   assert.equal(baseClaudeModelId('claude-opus[1M]'), 'claude-opus');
   assert.deepEqual(claudeModelVariants('claude-opus[1m]'), ['claude-opus', 'claude-opus[1m]']);
+});
+
+test('Claude Code 最大输出按客户端上限写入', () => {
+  assert.equal(claudeCodeMaxOutputTokens(32_000), 32_000);
+  assert.equal(claudeCodeMaxOutputTokens(131_072), CLAUDE_CODE_MAX_OUTPUT_TOKENS_LIMIT);
+  assert.equal(claudeCodeMaxOutputTokens(undefined), undefined);
 });
 
 test('百分比换算生成压缩位置和预留窗口', () => {

@@ -41,7 +41,7 @@ Provider 字段：
 - `压缩阈值`：默认 `60`；填写时使用 1-99 的整数百分比。
 - `最大输出`：正整数，可留空；填写时小于或等于上下文窗口。
 
-模型参数采用紧凑台账编辑。输入模型 ID 后，插件按“精确 ID、忽略大小写、Provider 前缀、`[1m]` 后缀、明确别名、日期快照”的顺序识别内置参数。聚焦上下文窗口、压缩阈值或最大输出输入框时显示对应候选列表，选择候选后才会写入表单。
+模型参数采用紧凑台账编辑。输入模型 ID 后，插件按“精确 ID、忽略大小写、Provider 前缀、`[1m]` 后缀、明确别名、日期快照”的顺序识别内置参数。聚焦上下文窗口、压缩阈值或最大输出输入框时显示对应候选列表，选择候选后才会写入表单。内置候选是随插件发布的静态参数表，不在填写或保存时实时从官网拉取。
 
 内置候选覆盖智谱 GLM、DeepSeek、通义千问、MiniMax 和 Codex/OpenAI 相关模型。未识别模型会显示以下通用候选：
 
@@ -49,7 +49,7 @@ Provider 字段：
 - 压缩阈值：`60`
 - 最大输出：`32000`
 
-新增模型默认填入压缩阈值 `60`。拉取模型时，插件为启发式识别到的模型带入对应上下文窗口；未识别模型默认使用上下文窗口 `200000`；压缩阈值默认填入 `60`。用户点击候选或手动输入后会覆盖默认值。当压缩阈值后的预留空间小于最大输出时，界面显示提示并允许保存。该提示用于说明客户端可能提前压缩。
+新增模型默认填入压缩阈值 `60`。拉取模型时，插件只从模型接口读取模型 ID，并为启发式识别到的模型带入内置上下文窗口和最大输出；未识别模型默认使用上下文窗口 `200000`；压缩阈值默认填入 `60`。用户点击候选或手动输入后会覆盖默认值。当压缩阈值后的预留空间小于最大输出时，界面显示提示并允许保存。该提示用于说明客户端可能提前压缩。
 
 ### 拉取模型
 
@@ -105,7 +105,7 @@ Claude 页面会写入 `settings.json` 的 `env`：
 - `ANTHROPIC_REASONING_MODEL`
 - `CLAUDE_CODE_AUTO_COMPACT_WINDOW`（模型配置上下文窗口时写入）
 - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`（模型配置压缩阈值时写入）
-- `CLAUDE_CODE_MAX_OUTPUT_TOKENS`（模型配置最大输出时写入）
+- `CLAUDE_CODE_MAX_OUTPUT_TOKENS`（模型配置最大输出时写入，最高写入 `64000`）
 - `CLAUDE_CODE_ATTRIBUTION_HEADER`（可选）
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`（可选）
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`（可选）
@@ -117,7 +117,7 @@ Claude 页面还会写入 `settings.json` 顶层字段：
 
 每个 Provider 模型在 Claude 下拉框和快速切换中显示普通版和 `[1M]` 版。`[1M]` 选项实际写入 `model-id[1m]`，由用户按上游模型能力选择。
 
-Claude 使用主模型的参数更新 env。上下文窗口写入 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，压缩阈值写入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，最大输出写入 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。模型未配置上下文窗口、压缩阈值或最大输出时，插件清理对应配置。
+Claude 使用主模型的参数更新 env。上下文窗口写入 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，压缩阈值写入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，最大输出写入 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。`CLAUDE_CODE_MAX_OUTPUT_TOKENS` 属于 Claude Code 客户端设置，插件将模型最大输出压到 `64000` 后写入，避免超过 Claude Code 接受的范围。模型未配置上下文窗口、压缩阈值或最大输出时，插件清理对应配置。
 
 运行设置使用“不设置 / 启用 / 禁用”或“不设置 / effort 值”选择，配置中缺少对应字段时默认选择“不设置”。`effortLevel` 支持 `low`、`medium`、`high`、`xhigh`、`max`。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
 
@@ -173,7 +173,7 @@ opencode 使用以下换算：
 compaction.reserved = contextWindow - floor(contextWindow × compactThresholdPercent / 100)
 ```
 
-opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时仍写入模型 ID，但不生成 `limit`。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时清理压缩配置。所选模型的 `reasoningEffort` 支持 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。
+opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。填写上下文窗口时写入 `limit.context`，填写最大输出时写入 `limit.output`，两者都未填写时仍写入模型 ID，但不生成 `limit`。`limit.output` 表示模型可生成的最大 token，插件保留 Provider 模型中配置的值，并通过 Provider 模型校验保证最大输出不大于上下文窗口。压缩阈值和上下文窗口都已填写时，插件计算 `compaction.reserved`；未填完时清理压缩配置。所选模型的 `reasoningEffort` 支持 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。
 
 ## 快速切换模型
 

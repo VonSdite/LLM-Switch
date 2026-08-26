@@ -102,7 +102,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(claudeEnv.ANTHROPIC_MODEL, 'glm-5.3[1m]');
     assert.equal(claudeEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
     assert.equal(claudeEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
-    assert.equal(claudeEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '131072');
+    assert.equal(claudeEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '64000');
     assert.equal(claudeEnv.CLAUDE_CODE_ATTRIBUTION_HEADER, '0');
     assert.equal(claudeEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1');
     assert.equal(claudeEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
@@ -129,7 +129,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const agents = await agentConfigs.readAgentsState(context, [provider]);
     assert.equal(agents.claude.autoCompactWindow, 1_048_576);
     assert.equal(agents.claude.runtimeSettings.effortLevel, 'max');
-    assert.equal(agents.claude.maxOutputTokens, 131_072);
+    assert.equal(agents.claude.maxOutputTokens, 64_000);
     assert.deepEqual(agents.codex.runtimeSettings, codexPayload.runtimeSettings);
     assert.deepEqual(agents.opencode.runtimeSettings, opencodePayload.runtimeSettings);
     const codexProviders = codex.model_providers as Record<string, Record<string, unknown>>;
@@ -206,7 +206,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const claudeWithoutCompactEnv = claudeWithoutCompact.env as Record<string, unknown>;
     assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
     assert.equal(claudeWithoutCompactEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, undefined);
-    assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '131072');
+    assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '64000');
     assert.equal(claudeWithoutCompact.effortLevel, undefined);
     const codexWithoutCompact = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     assert.equal(codexWithoutCompact.model_context_window, 1_048_576);

@@ -29,8 +29,14 @@ interface PresetEntry {
   maxOutputTokens: ModelParameterCandidate[];
 }
 
-const BIGMODEL_CODEX_URL = 'https://docs.bigmodel.cn/cn/coding-plan/tool/codex';
-const BIGMODEL_GLM_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3';
+const BIGMODEL_GLM_53_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3';
+const BIGMODEL_GLM_52_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.2';
+const BIGMODEL_GLM_51_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.1';
+const BIGMODEL_GLM_5_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5';
+const BIGMODEL_GLM_5_TURBO_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5-turbo';
+const BIGMODEL_GLM_47_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-4.7';
+const BIGMODEL_GLM_46_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-4.6';
+const BIGMODEL_GLM_45_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-4.5';
 const DEEPSEEK_URL = 'https://api-docs.deepseek.com/quick_start/pricing';
 const QWEN_URL = 'https://help.aliyun.com/zh/model-studio/text-generation-model/';
 const MINIMAX_URL = 'https://platform.minimax.io/docs/guides/models-intro';
@@ -41,7 +47,7 @@ const OPENAI_GPT_55_URL = 'https://developers.openai.com/api/docs/models/gpt-5.5
 const OPENAI_GPT_54_URL = 'https://developers.openai.com/api/docs/models/gpt-5.4';
 const OPENAI_GPT_55_RELEASE_URL = 'https://openai.com/index/introducing-gpt-5-5/';
 const OPENAI_CHECKED_AT = '2026-08-26';
-const CHECKED_AT = '2026-08-24';
+const CHECKED_AT = '2026-08-26';
 
 const official = (value: number, label: string, sourceUrl: string): ModelParameterCandidate => ({
   value,
@@ -97,26 +103,50 @@ const PRESETS: PresetEntry[] = [
   {
     ids: ['glm-5.3'],
     sourceLabel: '智谱 GLM-5.3 官方参数',
-    contextWindow: [official(1_048_576, '官方上下文 1,048,576', BIGMODEL_GLM_URL)],
-    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_URL)]
+    contextWindow: [official(1_048_576, '官方上下文 1,048,576', BIGMODEL_GLM_53_URL)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_53_URL)]
   },
   {
     ids: ['glm-5.2'],
-    sourceLabel: '智谱 Coding Plan 官方参数',
-    contextWindow: [official(1_000_000, '官方上下文 1,000,000', BIGMODEL_CODEX_URL)],
-    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_CODEX_URL)]
+    sourceLabel: '智谱 GLM-5.2 官方参数',
+    contextWindow: [official(1_000_000, '官方上下文 1,000,000', BIGMODEL_GLM_52_URL)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_52_URL)]
   },
   {
-    ids: ['glm-5.1', 'glm-5', 'glm-5-turbo', 'glm-4.7', 'glm-4.6'],
-    sourceLabel: '智谱 Coding Plan 官方参数',
-    contextWindow: [official(204_800, '官方上下文 204,800', BIGMODEL_CODEX_URL)],
-    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_CODEX_URL)]
+    ids: ['glm-5.1'],
+    sourceLabel: '智谱 GLM-5.1 官方参数',
+    contextWindow: [official(204_800, '官方上下文 204,800', BIGMODEL_GLM_51_URL)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_51_URL)]
+  },
+  {
+    ids: ['glm-5'],
+    sourceLabel: '智谱 GLM-5 官方参数',
+    contextWindow: [official(204_800, '官方上下文 204,800', BIGMODEL_GLM_5_URL)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_5_URL)]
+  },
+  {
+    ids: ['glm-5-turbo'],
+    sourceLabel: '智谱 GLM-5-Turbo 官方参数',
+    contextWindow: [official(204_800, '官方上下文 204,800', BIGMODEL_GLM_5_TURBO_URL)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_5_TURBO_URL)]
+  },
+  {
+    ids: ['glm-4.7'],
+    sourceLabel: '智谱 GLM-4.7 官方参数',
+    contextWindow: [official(204_800, '官方上下文 204,800', BIGMODEL_GLM_47_URL)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_47_URL)]
+  },
+  {
+    ids: ['glm-4.6'],
+    sourceLabel: '智谱 GLM-4.6 官方参数',
+    contextWindow: [official(204_800, '官方上下文 204,800', BIGMODEL_GLM_46_URL)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_46_URL)]
   },
   {
     ids: ['glm-4.5'],
-    sourceLabel: '智谱 Coding Plan 官方参数',
-    contextWindow: [official(131_072, '官方上下文 131,072', BIGMODEL_CODEX_URL)],
-    maxOutputTokens: [official(98_304, '官方最大输出 98,304', BIGMODEL_CODEX_URL)]
+    sourceLabel: '智谱 GLM-4.5 官方参数',
+    contextWindow: [official(131_072, '官方上下文 131,072', BIGMODEL_GLM_45_URL)],
+    maxOutputTokens: [official(98_304, '官方最大输出 98,304', BIGMODEL_GLM_45_URL)]
   },
   {
     ids: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-v4-flash-vision-exp'],
@@ -132,7 +162,7 @@ const PRESETS: PresetEntry[] = [
   },
   {
     ids: ['minimax-m3'],
-    sourceLabel: 'MiniMax 官方参数',
+    sourceLabel: 'MiniMax 官方上下文和输出参数',
     contextWindow: [official(1_000_000, '官方上下文 1,000,000', MINIMAX_URL)],
     maxOutputTokens: [
       official(131_072, '官方推荐输出 131,072', MINIMAX_URL),
@@ -140,9 +170,19 @@ const PRESETS: PresetEntry[] = [
     ]
   },
   {
-    ids: ['minimax-m2.7', 'minimax-m2.5', 'minimax-m2.1', 'minimax-m2'],
-    aliases: ['minimax-m2.7-highspeed', 'minimax-m2.5-highspeed', 'minimax-m2.1-highspeed', 'minimax-m2-highspeed'],
-    sourceLabel: 'MiniMax 官方参数',
+    ids: ['minimax-m2.7', 'minimax-m2.5', 'minimax-m2.1'],
+    aliases: ['minimax-m2.7-highspeed', 'minimax-m2.5-highspeed', 'minimax-m2.1-highspeed'],
+    sourceLabel: 'MiniMax 官方上下文和输出参数',
+    contextWindow: [official(204_800, '官方上下文 204,800', MINIMAX_URL)],
+    maxOutputTokens: [
+      official(65_536, '官方推荐输出 65,536', MINIMAX_URL),
+      official(204_800, '官方输出上限 204,800', MINIMAX_URL)
+    ]
+  },
+  {
+    ids: ['minimax-m2'],
+    aliases: ['minimax-m2-highspeed'],
+    sourceLabel: 'MiniMax 官方上下文和输出参数',
     contextWindow: [official(204_800, '官方上下文 204,800', MINIMAX_URL)],
     maxOutputTokens: [
       official(65_536, '官方推荐输出 65,536', MINIMAX_URL),
@@ -189,6 +229,7 @@ const PRESETS: PresetEntry[] = [
 
 export const DEFAULT_FETCHED_CONTEXT_WINDOW = 200_000;
 export const DEFAULT_COMPACT_THRESHOLD_PERCENT = 60;
+export const CLAUDE_CODE_MAX_OUTPUT_TOKENS_LIMIT = 64_000;
 
 const DEFAULT_CONTEXT = fallback(DEFAULT_FETCHED_CONTEXT_WINDOW, '通用上下文 200000');
 const COMPACT_CANDIDATE = fallback(DEFAULT_COMPACT_THRESHOLD_PERCENT, '建议压缩阈值 60');
@@ -238,6 +279,13 @@ export function calculateModelLimits(model: ProviderModelConfig): { compactAtTok
     compactAtTokens,
     reserved: model.contextWindow - compactAtTokens
   };
+}
+
+export function claudeCodeMaxOutputTokens(value: number | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return Math.min(value, CLAUDE_CODE_MAX_OUTPUT_TOKENS_LIMIT);
 }
 
 function modelLookupValues(modelId: string): string[] {
