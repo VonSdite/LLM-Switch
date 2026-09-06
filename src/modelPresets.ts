@@ -30,6 +30,7 @@ interface PresetEntry {
 }
 
 const BIGMODEL_GLM_53_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3';
+const BIGMODEL_GLM_53_FLASH_URL = 'https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash';
 const BIGMODEL_GLM_52_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.2';
 const BIGMODEL_GLM_51_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5.1';
 const BIGMODEL_GLM_5_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-5';
@@ -48,13 +49,14 @@ const OPENAI_GPT_54_URL = 'https://developers.openai.com/api/docs/models/gpt-5.4
 const OPENAI_GPT_55_RELEASE_URL = 'https://openai.com/index/introducing-gpt-5-5/';
 const OPENAI_CHECKED_AT = '2026-08-26';
 const CHECKED_AT = '2026-08-26';
+const CURRENT_CHECKED_AT = '2026-09-06';
 
-const official = (value: number, label: string, sourceUrl: string): ModelParameterCandidate => ({
+const official = (value: number, label: string, sourceUrl: string, checkedAt = CHECKED_AT): ModelParameterCandidate => ({
   value,
   kind: 'official',
   label,
   sourceUrl,
-  checkedAt: CHECKED_AT
+  checkedAt
 });
 
 const clientDefault = (value: number, label: string): ModelParameterCandidate => ({
@@ -78,11 +80,11 @@ const openAiOfficial = (value: number, label: string, sourceUrl: string): ModelP
   checkedAt: OPENAI_CHECKED_AT
 });
 
-const openAiClientDefault = (value: number, label: string): ModelParameterCandidate => ({
+const openAiClientDefault = (value: number, label: string, checkedAt = OPENAI_CHECKED_AT): ModelParameterCandidate => ({
   value,
   kind: 'client-default',
   label,
-  checkedAt: OPENAI_CHECKED_AT
+  checkedAt
 });
 
 const gptContextWindows = (apiUrl: string): ModelParameterCandidate[] => [
@@ -101,10 +103,16 @@ const gptMaxOutputTokens = (apiUrl: string): ModelParameterCandidate[] => [
 
 const PRESETS: PresetEntry[] = [
   {
+    ids: ['glm-5.3-flash'],
+    sourceLabel: '智谱 GLM-5.3-Flash 官方参数',
+    contextWindow: [official(1_048_576, '官方上下文 1,048,576', BIGMODEL_GLM_53_FLASH_URL, CURRENT_CHECKED_AT)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_53_FLASH_URL, CURRENT_CHECKED_AT)]
+  },
+  {
     ids: ['glm-5.3'],
     sourceLabel: '智谱 GLM-5.3 官方参数',
-    contextWindow: [official(1_048_576, '官方上下文 1,048,576', BIGMODEL_GLM_53_URL)],
-    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_53_URL)]
+    contextWindow: [official(1_048_576, '官方上下文 1,048,576', BIGMODEL_GLM_53_URL, CURRENT_CHECKED_AT)],
+    maxOutputTokens: [official(131_072, '官方最大输出 131,072', BIGMODEL_GLM_53_URL, CURRENT_CHECKED_AT)]
   },
   {
     ids: ['glm-5.2'],
@@ -155,7 +163,13 @@ const PRESETS: PresetEntry[] = [
     maxOutputTokens: [official(393_216, '官方最大输出 393,216', DEEPSEEK_URL)]
   },
   {
-    ids: ['qwen3.8-max', 'qwen3.7-plus', 'qwen3.7-flash'],
+    ids: ['qwen3.8-max', 'qwen3.8-flash'],
+    sourceLabel: '通义千问官方上下文和内置输出参数',
+    contextWindow: [official(1_000_000, '官方上下文 1,000,000', QWEN_URL, CURRENT_CHECKED_AT)],
+    maxOutputTokens: [fallback(131_072, '内置最大输出 131,072')]
+  },
+  {
+    ids: ['qwen3.7-plus', 'qwen3.7-flash'],
     sourceLabel: '通义千问官方上下文，输出使用通用候选',
     contextWindow: [official(1_000_000, '官方上下文 1,000,000', QWEN_URL)],
     maxOutputTokens: [fallback(32_000, '通用最大输出 32,000（待确认）')]
@@ -188,6 +202,16 @@ const PRESETS: PresetEntry[] = [
       official(65_536, '官方推荐输出 65,536', MINIMAX_URL),
       official(204_800, '官方输出上限 204,800', MINIMAX_URL)
     ]
+  },
+  {
+    ids: ['gpt-6-astra'],
+    sourceLabel: 'GPT-6 Astra Codex 默认值和最大上下文候选',
+    contextWindow: [
+      openAiClientDefault(272_000, 'Codex 默认上下文 272,000', CURRENT_CHECKED_AT),
+      openAiClientDefault(872_000, 'Codex 最大上下文 872,000', CURRENT_CHECKED_AT)
+    ],
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: [openAiClientDefault(128_000, '默认最大输出 128,000', CURRENT_CHECKED_AT)]
   },
   {
     ids: ['gpt-5.6-sol'],

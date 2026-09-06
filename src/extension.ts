@@ -11,7 +11,7 @@ import {
 } from './agentConfigs';
 import { ConfigPathTarget, resetAgentConfigPath, setAgentConfigPath } from './configPaths';
 import { claudeModelVariants, getModelParameterSuggestions } from './modelPresets';
-import { defaultFetchedModelConfig } from './providerModels';
+import { extractFetchedModelConfigs } from './providerModels';
 import { deleteProvider, loadProviders, reorderProviders, upsertProvider } from './providerStore';
 import { getManagerHtml } from './webview';
 import {
@@ -655,9 +655,9 @@ async function fetchProviderModels(payload: FetchProviderModelsPayload): Promise
 
   for (const url of candidates) {
     try {
-      const models = await fetchModelsFromUrl(url, payload);
-      if (models.length > 0) {
-        return { models, modelDefaults: models.map(defaultFetchedModelConfig), sourceUrl: url };
+      const modelDefaults = await fetchModelsFromUrl(url, payload);
+      if (modelDefaults.length > 0) {
+        return { models: modelDefaults.map((model) => model.id), modelDefaults, sourceUrl: url };
       }
       errors.push(`${url}: 未返回模型列表`);
     } catch (error) {
@@ -697,7 +697,7 @@ function joinUrl(baseUrl: string, suffix: string): string {
   return `${baseUrl.replace(/\/+$/g, '')}/${suffix.replace(/^\/+/g, '')}`;
 }
 
-async function fetchModelsFromUrl(url: string, options: ModelRequestOptions): Promise<string[]> {
+async function fetchModelsFromUrl(url: string, options: ModelRequestOptions): Promise<ProviderModelConfig[]> {
   const response = await requestText(url, options);
   if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(`HTTP ${response.statusCode}${response.body ? ` ${response.body.slice(0, 160)}` : ''}`);
@@ -709,7 +709,7 @@ async function fetchModelsFromUrl(url: string, options: ModelRequestOptions): Pr
   } catch {
     throw new Error('响应不是有效 JSON');
   }
-  return extractModelNames(json);
+  return extractFetchedModelConfigs(json);
 }
 
 function requestText(rawUrl: string, options: ModelRequestOptions): Promise<{ statusCode: number; body: string }> {
@@ -1128,29 +1128,6 @@ function applyProxyAuthorization(headers: Record<string, string>, proxy: URL, pr
   if (proxyAuthorization.trim()) {
     headers['proxy-authorization'] = proxyAuthorization.trim();
   }
-}
-
-function extractModelNames(value: unknown): string[] {
-  const root = asRecord(value);
-  const candidates = Array.isArray(value)
-    ? value
-    : Array.isArray(root.data)
-      ? root.data
-      : Array.isArray(root.models)
-        ? root.models
-        : [];
-  const names = candidates.map((item) => {
-    if (typeof item === 'string') {
-      return item.trim();
-    }
-    const record = asRecord(item);
-    return stringValue(record.id).trim() || stringValue(record.name).trim() || stringValue(record.model).trim();
-  }).filter(Boolean);
-  return Array.from(new Set(names)).sort((left, right) => left.localeCompare(right));
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 function errorMessage(error: unknown): string {

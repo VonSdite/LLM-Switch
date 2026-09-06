@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { reconcileManagedFields } from './managedFields';
 import { CLAUDE_CODE_MAX_OUTPUT_TOKENS_LIMIT, baseClaudeModelId, calculateModelLimits, claudeCodeMaxOutputTokens, claudeModelVariants, getModelParameterSuggestions } from './modelPresets';
-import { mergeFetchedModels, normalizeProviderModels } from './providerModels';
+import { extractFetchedModelConfigs, mergeFetchedModels, normalizeProviderModels } from './providerModels';
 
 test('旧字符串模型迁移后只保留模型 ID', () => {
   assert.deepEqual(normalizeProviderModels(['glm-5.3', 'deepseek-v4-pro']), [
@@ -44,6 +44,26 @@ test('拉取模型按 ID 保留参数并为新模型补默认参数', () => {
   ]);
 });
 
+test('拉取模型优先采用接口返回的上下文和最大输出元数据', () => {
+  assert.deepEqual(extractFetchedModelConfigs({
+    data: [
+      { id: 'nested-model', limits: { context: 500_000, output: 80_000 } },
+      { id: 'openrouter-model', context_length: 300_000, top_provider: { max_completion_tokens: 64_000 } },
+      { slug: 'gpt-6-astra', context_window: 272_000, max_context_window: 872_000 },
+      { id: 'max-only-model', max_context_window: 872_000, max_output_tokens: 128_000 },
+      { name: 'snake-case-model', context_window: '200000', max_output_tokens: '32000' },
+      'unknown-model'
+    ]
+  }), [
+    { id: 'gpt-6-astra', contextWindow: 272_000, compactThresholdPercent: 85, maxOutputTokens: 128_000 },
+    { id: 'max-only-model', contextWindow: 872_000, compactThresholdPercent: 60, maxOutputTokens: 128_000 },
+    { id: 'nested-model', contextWindow: 500_000, compactThresholdPercent: 60, maxOutputTokens: 80_000 },
+    { id: 'openrouter-model', contextWindow: 300_000, compactThresholdPercent: 60, maxOutputTokens: 64_000 },
+    { id: 'snake-case-model', contextWindow: 200_000, compactThresholdPercent: 60, maxOutputTokens: 32_000 },
+    { id: 'unknown-model', contextWindow: 200_000, compactThresholdPercent: 60, maxOutputTokens: 32_000 }
+  ]);
+});
+
 test('内置候选支持精确、别名、日期快照和通用回退', () => {
   assert.equal(getModelParameterSuggestions('glm-5.3').contextWindow[0].value, 1_048_576);
   assert.equal(getModelParameterSuggestions('MiniMax-M2.7-highspeed').matchKind, 'alias');
@@ -68,6 +88,21 @@ test('GPT 内置候选使用 85 压缩阈值', () => {
   assert.deepEqual(mergeFetchedModels([], ['gpt-5.5']), [
     { id: 'gpt-5.5', contextWindow: 372_000, compactThresholdPercent: 85, maxOutputTokens: 128_000 }
   ]);
+});
+
+test('最新模型使用各自的内置默认参数', () => {
+  assert.deepEqual(mergeFetchedModels([], ['gpt-6-astra', 'qwen3.8-max', 'qwen3.8-flash', 'glm-5.3', 'glm-5.3-flash']), [
+    { id: 'glm-5.3', contextWindow: 1_048_576, compactThresholdPercent: 60, maxOutputTokens: 131_072 },
+    { id: 'glm-5.3-flash', contextWindow: 1_048_576, compactThresholdPercent: 60, maxOutputTokens: 131_072 },
+    { id: 'gpt-6-astra', contextWindow: 272_000, compactThresholdPercent: 85, maxOutputTokens: 128_000 },
+    { id: 'qwen3.8-flash', contextWindow: 1_000_000, compactThresholdPercent: 60, maxOutputTokens: 131_072 },
+    { id: 'qwen3.8-max', contextWindow: 1_000_000, compactThresholdPercent: 60, maxOutputTokens: 131_072 }
+  ]);
+  assert.deepEqual(getModelParameterSuggestions('gpt-6-astra').contextWindow.map((candidate) => candidate.value), [272_000, 872_000]);
+  assert.deepEqual(extractFetchedModelConfigs({ data: [{ id: 'gpt-6-astra' }] }), [
+    { id: 'gpt-6-astra', contextWindow: 272_000, compactThresholdPercent: 85, maxOutputTokens: 128_000 }
+  ]);
+  assert.equal(getModelParameterSuggestions('provider/gpt-6-astra-20260906').matchKind, 'snapshot');
 });
 
 test('Claude 1M 后缀归一化且不会重复追加', () => {
