@@ -105,6 +105,19 @@ test('最新模型使用各自的内置默认参数', () => {
   assert.equal(getModelParameterSuggestions('provider/gpt-6-astra-20260906').matchKind, 'snapshot');
 });
 
+test('Kimi 系列使用官方上下文和输出默认值', () => {
+  assert.deepEqual(mergeFetchedModels([], ['kimi-k3', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k2.6']), [
+    { id: 'kimi-k2.6', contextWindow: 262_144, compactThresholdPercent: 60, maxOutputTokens: 32_768 },
+    { id: 'kimi-k2.7-code', contextWindow: 262_144, compactThresholdPercent: 60, maxOutputTokens: 32_768 },
+    { id: 'kimi-k2.7-code-highspeed', contextWindow: 262_144, compactThresholdPercent: 60, maxOutputTokens: 32_768 },
+    { id: 'kimi-k3', contextWindow: 1_048_576, compactThresholdPercent: 60, maxOutputTokens: 131_072 }
+  ]);
+  assert.deepEqual(getModelParameterSuggestions('kimi-k3').maxOutputTokens.map((candidate) => candidate.value), [131_072, 1_048_576]);
+  assert.equal(getModelParameterSuggestions('provider/kimi-k2.7-code').matchKind, 'exact');
+  assert.equal(getModelParameterSuggestions('KIMI-K2.7-CODE-HIGHSPEED').matchKind, 'alias');
+  assert.equal(getModelParameterSuggestions('kimi-k2.6-20260903').matchKind, 'snapshot');
+});
+
 test('Claude 1M 后缀归一化且不会重复追加', () => {
   assert.equal(baseClaudeModelId('claude-opus[1M]'), 'claude-opus');
   assert.deepEqual(claudeModelVariants('claude-opus[1m]'), ['claude-opus', 'claude-opus[1m]']);

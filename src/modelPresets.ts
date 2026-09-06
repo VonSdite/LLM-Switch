@@ -41,6 +41,9 @@ const BIGMODEL_GLM_45_URL = 'https://docs.bigmodel.cn/cn/guide/models/text/glm-4
 const DEEPSEEK_URL = 'https://api-docs.deepseek.com/quick_start/pricing';
 const QWEN_URL = 'https://help.aliyun.com/zh/model-studio/text-generation-model/';
 const MINIMAX_URL = 'https://platform.minimax.io/docs/guides/models-intro';
+const KIMI_K3_URL = 'https://platform.moonshot.cn/docs/guide/kimi-k3-quickstart';
+const KIMI_K27_CODE_URL = 'https://platform.moonshot.cn/docs/guide/kimi-k2-7-code-quickstart';
+const KIMI_K26_URL = 'https://platform.moonshot.cn/docs/guide/kimi-k2-6-quickstart';
 const OPENAI_GPT_56_SOL_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-sol';
 const OPENAI_GPT_56_TERRA_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-terra';
 const OPENAI_GPT_56_LUNA_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-luna';
@@ -202,6 +205,28 @@ const PRESETS: PresetEntry[] = [
       official(65_536, '官方推荐输出 65,536', MINIMAX_URL),
       official(204_800, '官方输出上限 204,800', MINIMAX_URL)
     ]
+  },
+  {
+    ids: ['kimi-k3'],
+    sourceLabel: 'Moonshot Kimi K3 官方参数',
+    contextWindow: [official(1_048_576, '官方上下文 1,048,576', KIMI_K3_URL, CURRENT_CHECKED_AT)],
+    maxOutputTokens: [
+      official(131_072, '官方默认输出 131,072', KIMI_K3_URL, CURRENT_CHECKED_AT),
+      official(1_048_576, '官方最大输出 1,048,576', KIMI_K3_URL, CURRENT_CHECKED_AT)
+    ]
+  },
+  {
+    ids: ['kimi-k2.7-code'],
+    aliases: ['kimi-k2.7-code-highspeed'],
+    sourceLabel: 'Moonshot Kimi K2.7 Code 官方参数',
+    contextWindow: [official(262_144, '官方上下文 262,144', KIMI_K27_CODE_URL, CURRENT_CHECKED_AT)],
+    maxOutputTokens: [official(32_768, '官方默认输出 32,768', KIMI_K27_CODE_URL, CURRENT_CHECKED_AT)]
+  },
+  {
+    ids: ['kimi-k2.6'],
+    sourceLabel: 'Moonshot Kimi K2.6 官方参数',
+    contextWindow: [official(262_144, '官方上下文 262,144', KIMI_K26_URL, CURRENT_CHECKED_AT)],
+    maxOutputTokens: [official(32_768, '官方默认输出 32,768', KIMI_K26_URL, CURRENT_CHECKED_AT)]
   },
   {
     ids: ['gpt-6-astra'],
