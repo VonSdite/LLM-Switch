@@ -43,7 +43,9 @@ Provider 字段：
 
 模型参数采用紧凑台账编辑。输入模型 ID 后，插件按“精确 ID、忽略大小写、Provider 前缀、`[1m]` 后缀、明确别名、日期快照”的顺序识别内置参数。聚焦上下文窗口、压缩阈值或最大输出输入框时显示对应候选列表，选择候选后才会写入表单。内置候选是随插件发布的静态参数表，不在填写或保存时实时从官网拉取。
 
-内置候选覆盖智谱 GLM、DeepSeek、通义千问、MiniMax、Moonshot Kimi 和 Codex/OpenAI 相关模型。未识别模型会显示以下通用候选：
+内置候选覆盖智谱 GLM、DeepSeek、Anthropic Claude、通义千问、MiniMax、Moonshot Kimi 和 Codex/OpenAI 相关模型。模型 ID、上下文窗口、最大输出和候选来源统一维护在 `src/modelLimits.ts`；新增模型直接在对应厂商分组中增加条目。
+
+未识别模型会显示以下通用候选：
 
 - 上下文窗口：`200000`
 - 压缩阈值：`60`
@@ -51,7 +53,7 @@ Provider 字段：
 
 新增模型默认填入压缩阈值 `60`。拉取模型时，插件优先读取模型对象中的上下文窗口和最大输出元数据，缺少元数据时按模型 ID 使用内置参数，再缺失时使用通用默认值。未识别模型默认使用上下文窗口 `200000` 和最大输出 `32000`。用户点击候选或手动输入后会覆盖默认值。当压缩阈值后的预留空间小于最大输出时，界面显示提示并允许保存。该提示用于说明客户端可能提前压缩。
 
-当前最新模型的内置默认值为：GPT-6 Astra `272000/128000`，Qwen3.8 Max、Qwen3.8 Flash `1000000/131072`，GLM-5.3、GLM-5.3-Flash `1048576/131072`。数值依次表示上下文窗口和最大输出。GPT-6 Astra 另外提供 `872000` 最大上下文候选。
+当前模型的内置默认值包括：GPT-6 Astra、GPT-6 Sol、GPT-6 Luna 和 Daybreak Blue `272000/128000`，Daybreak Red `372000/128000`，Claude Opus 4.8、Opus 5、Opus 5.5、Fable 5、Fable 5.1、Mythos 5、Mythos 5.1 和 Mythos Preview `1000000/128000`，Claude Sonnet 5 `1000000/64000`，Claude Haiku 4.5、Claude Sonnet 4.5 `200000/64000`，DeepSeek V3.2 `163840/65536`，DeepSeek V4.1 Flash（canonical ID 为 `deepseek-flash`，兼容 `deepseek-4.1-flash`、`deepseek-v4.1-flash` 和历史名称）及 V4 Pro `1048576/393216`。数值依次表示上下文窗口和最大输出。GPT-6 Astra、GPT-6 Sol、GPT-6 Luna 和 Daybreak Blue 另外提供 `872000` 最大上下文候选。
 
 Kimi K3 的内置默认值为 `1048576/131072`，并提供 `1048576` 最大输出候选；Kimi K2.7 Code、Kimi K2.7 Code Highspeed 和 Kimi K2.6 的内置默认值为 `262144/32768`。
 

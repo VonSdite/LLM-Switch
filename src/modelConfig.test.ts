@@ -105,6 +105,100 @@ test('最新模型使用各自的内置默认参数', () => {
   assert.equal(getModelParameterSuggestions('provider/gpt-6-astra-20260906').matchKind, 'snapshot');
 });
 
+test('新增 OpenAI、Claude 和 DeepSeek 模型使用集中台账参数', () => {
+  const configs = new Map(mergeFetchedModels([], [
+    'gpt-6-sol',
+    'gpt-6-luna',
+    'gpt-daybreak-blue-latest',
+    'gpt-daybreak-red-latest',
+    'claude-opus-4-8',
+    'claude-opus-5',
+    'claude-opus-5-5',
+    'claude-sonnet-5',
+    'claude-fable-5-1',
+    'claude-opus-4-7',
+    'claude-sonnet-4-6',
+    'claude-haiku-4-5',
+    'deepseek-v3.2',
+    'deepseek-4.1-flash',
+    'deepseek-v4-pro'
+  ]).map((model) => [model.id, model]));
+
+  assert.deepEqual(configs.get('gpt-6-sol'), {
+    id: 'gpt-6-sol',
+    contextWindow: 272_000,
+    compactThresholdPercent: 85,
+    maxOutputTokens: 128_000
+  });
+  assert.deepEqual(configs.get('gpt-daybreak-red-latest'), {
+    id: 'gpt-daybreak-red-latest',
+    contextWindow: 372_000,
+    compactThresholdPercent: 85,
+    maxOutputTokens: 128_000
+  });
+  assert.deepEqual(configs.get('gpt-6-luna'), {
+    id: 'gpt-6-luna',
+    contextWindow: 272_000,
+    compactThresholdPercent: 85,
+    maxOutputTokens: 128_000
+  });
+  assert.deepEqual(configs.get('claude-opus-5-5'), {
+    id: 'claude-opus-5-5',
+    contextWindow: 1_000_000,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 128_000
+  });
+  assert.deepEqual(configs.get('claude-sonnet-5'), {
+    id: 'claude-sonnet-5',
+    contextWindow: 1_000_000,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 64_000
+  });
+  assert.deepEqual(configs.get('claude-fable-5-1'), {
+    id: 'claude-fable-5-1',
+    contextWindow: 1_000_000,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 128_000
+  });
+  assert.deepEqual(configs.get('claude-opus-4-7'), {
+    id: 'claude-opus-4-7',
+    contextWindow: 1_000_000,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 128_000
+  });
+  assert.deepEqual(configs.get('claude-sonnet-4-6'), {
+    id: 'claude-sonnet-4-6',
+    contextWindow: 1_000_000,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 64_000
+  });
+  assert.deepEqual(configs.get('claude-haiku-4-5'), {
+    id: 'claude-haiku-4-5',
+    contextWindow: 200_000,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 64_000
+  });
+  assert.deepEqual(configs.get('deepseek-v3.2'), {
+    id: 'deepseek-v3.2',
+    contextWindow: 163_840,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 65_536
+  });
+  assert.deepEqual(configs.get('deepseek-4.1-flash'), {
+    id: 'deepseek-4.1-flash',
+    contextWindow: 1_048_576,
+    compactThresholdPercent: 60,
+    maxOutputTokens: 393_216
+  });
+  assert.equal(getModelParameterSuggestions('deepseek-flash').matchKind, 'exact');
+  assert.equal(getModelParameterSuggestions('deepseek-v4.1-flash').matchKind, 'exact');
+  assert.equal(getModelParameterSuggestions('provider/claude-sonnet-4-6-20260924').matchKind, 'snapshot');
+  assert.equal(getModelParameterSuggestions('claude-sonnet-4').matchKind, 'alias');
+  assert.equal(getModelParameterSuggestions('claude-opus-5-5-20260922').matchKind, 'snapshot');
+  assert.equal(getModelParameterSuggestions('gpt-daybreak-blue-latest').contextWindow[0].value, 272_000);
+  assert.deepEqual(getModelParameterSuggestions('gpt-6-sol').contextWindow.map((candidate) => candidate.value), [272_000, 872_000]);
+});
+
 test('Kimi 系列使用官方上下文和输出默认值', () => {
   assert.deepEqual(mergeFetchedModels([], ['kimi-k3', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k2.6']), [
     { id: 'kimi-k2.6', contextWindow: 262_144, compactThresholdPercent: 60, maxOutputTokens: 32_768 },
