@@ -42,10 +42,13 @@ const OPENAI_GPT_54_URL = 'https://developers.openai.com/api/docs/models/gpt-5.4
 const OPENAI_GPT_55_RELEASE_URL = 'https://openai.com/index/introducing-gpt-5-5/';
 const OPENAI_MODELS_URL = 'https://developers.openai.com/api/docs/models';
 const ANTHROPIC_MODELS_URL = 'https://docs.anthropic.com/en/docs/about-claude/models/overview';
+const ANTHROPIC_SONNET_55_SYSTEM_CARD_URL = 'https://www.anthropic.com/claude-sonnet-5-5-system-card';
+const ANTHROPIC_HAIKU_55_SYSTEM_CARD_URL = 'https://www.anthropic.com/claude-haiku-5-5-system-card';
 const OPENAI_CHECKED_AT = '2026-08-26';
 const CHECKED_AT = '2026-08-26';
 const CURRENT_CHECKED_AT = '2026-09-06';
 const LATEST_CHECKED_AT = '2026-09-24';
+const UPDATED_CHECKED_AT = '2026-10-08';
 
 const official = (value: number, label: string, sourceUrl: string, checkedAt = CHECKED_AT): ModelParameterCandidate => ({
   value,
@@ -279,6 +282,12 @@ export const MODEL_LIMITS: ModelLimitPreset[] = [
     maxOutputTokens: [anthropicOfficial(128_000, '模型目录最大输出 128,000')]
   },
   {
+    ids: ['claude-sonnet-5-5'],
+    sourceLabel: 'Anthropic Claude Sonnet 5.5 系统卡上下文和系列输出建议',
+    contextWindow: [official(1_000_000, '系统卡上下文 1,000,000', ANTHROPIC_SONNET_55_SYSTEM_CARD_URL, UPDATED_CHECKED_AT)],
+    maxOutputTokens: [fallback(64_000, 'Claude 系列建议最大输出 64,000')]
+  },
+  {
     ids: ['claude-sonnet-5'],
     sourceLabel: 'Anthropic Claude Sonnet 5 模型参数',
     contextWindow: [anthropicOfficial(1_000_000, '模型目录上下文 1,000,000')],
@@ -321,6 +330,12 @@ export const MODEL_LIMITS: ModelLimitPreset[] = [
     maxOutputTokens: [anthropicOfficial(64_000, '模型目录最大输出 64,000')]
   },
   {
+    ids: ['claude-haiku-5-5'],
+    sourceLabel: 'Anthropic Claude Haiku 5.5 系统卡上下文和系列输出建议',
+    contextWindow: [official(1_000_000, '系统卡上下文 1,000,000', ANTHROPIC_HAIKU_55_SYSTEM_CARD_URL, UPDATED_CHECKED_AT)],
+    maxOutputTokens: [fallback(64_000, 'Claude 系列建议最大输出 64,000')]
+  },
+  {
     ids: ['claude-haiku-4-5'],
     sourceLabel: 'Anthropic Claude Haiku 4.5 模型参数',
     contextWindow: [anthropicOfficial(200_000, '模型目录上下文 200,000')],
@@ -341,6 +356,16 @@ export const MODEL_LIMITS: ModelLimitPreset[] = [
   },
 
   // OpenAI / Codex
+  {
+    ids: ['gpt-6.1-sol'],
+    sourceLabel: 'GPT-6.1 Sol Codex 目录参数和 GPT 系列输出建议',
+    contextWindow: [
+      openAiClientDefault(272_000, 'Codex 默认上下文 272,000', UPDATED_CHECKED_AT),
+      openAiClientDefault(872_000, 'Codex 最大上下文 872,000', UPDATED_CHECKED_AT)
+    ],
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: [fallback(128_000, 'GPT 系列建议最大输出 128,000')]
+  },
   {
     ids: ['gpt-6-astra'],
     sourceLabel: 'GPT-6 Astra Codex 默认值和最大上下文候选',

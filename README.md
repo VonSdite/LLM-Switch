@@ -55,6 +55,8 @@ Provider 字段：
 
 当前模型的内置默认值包括：GPT-6 Astra、GPT-6 Sol、GPT-6 Luna 和 Daybreak Blue `272000/128000`，Daybreak Red `372000/128000`，Claude Opus 4.8、Opus 5、Opus 5.5、Fable 5、Fable 5.1、Mythos 5、Mythos 5.1 和 Mythos Preview `1000000/128000`，Claude Sonnet 5 `1000000/64000`，Claude Haiku 4.5、Claude Sonnet 4.5 `200000/64000`，DeepSeek V3.2 `163840/65536`，DeepSeek V4.1 Flash（canonical ID 为 `deepseek-flash`，兼容 `deepseek-4.1-flash`、`deepseek-v4.1-flash` 和历史名称）及 V4 Pro `1048576/393216`。数值依次表示上下文窗口和最大输出。GPT-6 Astra、GPT-6 Sol、GPT-6 Luna 和 Daybreak Blue 另外提供 `872000` 最大上下文候选。
 
+GPT-6.1 Sol 的内置默认值为 `272000/128000`，并提供 `872000` 最大上下文候选；Claude Sonnet 5.5 和 Claude Haiku 5.5 的内置默认值为 `1000000/64000`。GPT-6.1 Sol 的上下文来自 Codex 模型目录，两个 Claude 模型的上下文来自官方系统卡。这三个模型的最大输出字段采用系列建议值，拉取模型时优先使用接口返回的最大输出元数据。
+
 Kimi K3 的内置默认值为 `1048576/131072`，并提供 `1048576` 最大输出候选；Kimi K2.7 Code、Kimi K2.7 Code Highspeed 和 Kimi K2.6 的内置默认值为 `262144/32768`。
 
 ### 拉取模型
