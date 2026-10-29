@@ -32,8 +32,10 @@ const DEEPSEEK_URL = 'https://api-docs.deepseek.com/quick_start/pricing';
 const QWEN_URL = 'https://help.aliyun.com/zh/model-studio/text-generation-model/';
 const MINIMAX_URL = 'https://platform.minimax.io/docs/guides/models-intro';
 const KIMI_K3_URL = 'https://platform.moonshot.cn/docs/guide/kimi-k3-quickstart';
+const KIMI_K31_PRO_URL = 'https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart';
 const KIMI_K27_CODE_URL = 'https://platform.moonshot.cn/docs/guide/kimi-k2-7-code-quickstart';
 const KIMI_K26_URL = 'https://platform.moonshot.cn/docs/guide/kimi-k2-6-quickstart';
+const OPENAI_GPT_61_TERRA_URL = 'https://developers.openai.com/api/docs/models/gpt-6.1-terra';
 const OPENAI_GPT_56_SOL_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-sol';
 const OPENAI_GPT_56_TERRA_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-terra';
 const OPENAI_GPT_56_LUNA_URL = 'https://developers.openai.com/api/docs/models/gpt-5.6-luna';
@@ -49,6 +51,7 @@ const CHECKED_AT = '2026-08-26';
 const CURRENT_CHECKED_AT = '2026-09-06';
 const LATEST_CHECKED_AT = '2026-09-24';
 const UPDATED_CHECKED_AT = '2026-10-08';
+const NEWEST_CHECKED_AT = '2026-10-29';
 
 const official = (value: number, label: string, sourceUrl: string, checkedAt = CHECKED_AT): ModelParameterCandidate => ({
   value,
@@ -261,6 +264,16 @@ export const MODEL_LIMITS: ModelLimitPreset[] = [
     ]
   },
   {
+    ids: ['kimi-k3.1-pro'],
+    aliases: ['kimi-k3.1', 'kimi-k3.1-pro-highspeed', 'kimi-k3-1-pro', 'kimi-k3-1-pro-highspeed'],
+    sourceLabel: 'Moonshot Kimi K3.1 Pro 官方参数',
+    contextWindow: [official(1_048_576, '官方上下文 1,048,576', KIMI_K31_PRO_URL, NEWEST_CHECKED_AT)],
+    maxOutputTokens: [
+      official(131_072, '官方默认输出 131,072', KIMI_K31_PRO_URL, NEWEST_CHECKED_AT),
+      official(1_048_576, '官方最大输出 1,048,576', KIMI_K31_PRO_URL, NEWEST_CHECKED_AT)
+    ]
+  },
+  {
     ids: ['kimi-k2.7-code'],
     aliases: ['kimi-k2.7-code-highspeed'],
     sourceLabel: 'Moonshot Kimi K2.7 Code 官方参数',
@@ -365,6 +378,18 @@ export const MODEL_LIMITS: ModelLimitPreset[] = [
     ],
     compactThresholdPercent: gptCompactThreshold(),
     maxOutputTokens: [fallback(128_000, 'GPT 系列建议最大输出 128,000')]
+  },
+  {
+    ids: ['gpt-6.1-terra'],
+    aliases: ['gpt-6.1-terra-pro', 'gpt-6.1-terra-fast'],
+    sourceLabel: 'GPT-6.1 Terra Codex 目录参数和 OpenAI 文档候选',
+    contextWindow: [
+      openAiClientDefault(272_000, 'Codex 默认上下文 272,000', NEWEST_CHECKED_AT),
+      openAiClientDefault(872_000, 'Codex 最大上下文 872,000', NEWEST_CHECKED_AT),
+      official(1_050_000, 'API 文档上下文 1,050,000', OPENAI_GPT_61_TERRA_URL, NEWEST_CHECKED_AT)
+    ],
+    compactThresholdPercent: gptCompactThreshold(),
+    maxOutputTokens: [official(128_000, 'API 文档最大输出 128,000', OPENAI_GPT_61_TERRA_URL, NEWEST_CHECKED_AT)]
   },
   {
     ids: ['gpt-6-astra'],

@@ -1933,7 +1933,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
       }
 
       function claudeEffortField(selected) {
-        return fieldWithHelp('Effort level', '- 写入 settings.json 的 effortLevel。\\n- 不设置时清理插件管理的 effortLevel。\\n- 可选值对应 Claude Code 的 /effort 和 --effort。', select(
+        return fieldWithHelp('Effort level', '- 写入 env.CLAUDE_CODE_EFFORT_LEVEL。\\n- 不设置时清理插件管理的 CLAUDE_CODE_EFFORT_LEVEL。\\n- 可选值对应 Claude Code 的 /effort 和 --effort。', select(
           'claudeEffortLevel',
           [['', '不设置']].concat(claudeEffortLevels.map(function (value) { return [value, value]; })),
           selected || '',
@@ -2784,7 +2784,7 @@ export function getManagerHtml(webview: vscode.Webview): string {
           managedPreviewRow(agent, 'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', agent.autoCompactWindow, modelConfig && modelConfig.contextWindow, undefined, !(modelConfig && modelConfig.contextWindow)),
           managedPreviewRow(agent, 'env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', agent.runtimeSettings.autoCompactPctOverride, modelConfig && modelConfig.compactThresholdPercent, undefined, !(modelConfig && modelConfig.compactThresholdPercent !== undefined)),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_MAX_OUTPUT_TOKENS', agent.maxOutputTokens, claudeCodeMaxOutputTokens(modelConfig && modelConfig.maxOutputTokens), undefined, !(modelConfig && modelConfig.maxOutputTokens)),
-          managedPreviewRow(agent, 'effortLevel', agent.runtimeSettings.effortLevel, runtimeSettings.effortLevel),
+          managedPreviewRow(agent, 'env.CLAUDE_CODE_EFFORT_LEVEL', agent.runtimeSettings.effortLevel, runtimeSettings.effortLevel),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_ATTRIBUTION_HEADER', claudeModeValue(agent.runtimeSettings.attributionHeader, '1', '0'), claudeModeValue(runtimeSettings.attributionHeader, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', claudeModeValue(agent.runtimeSettings.disableNonessentialTraffic, '1', '0'), claudeModeValue(runtimeSettings.disableNonessentialTraffic, '1', '0')),
           managedPreviewRow(agent, 'env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', claudeModeValue(agent.runtimeSettings.experimentalAgentTeams, '1', '0'), claudeModeValue(runtimeSettings.experimentalAgentTeams, '1', '0')),

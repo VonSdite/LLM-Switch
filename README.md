@@ -55,9 +55,9 @@ Provider 字段：
 
 当前模型的内置默认值包括：GPT-6 Astra、GPT-6 Sol、GPT-6 Luna 和 Daybreak Blue `272000/128000`，Daybreak Red `372000/128000`，Claude Opus 4.8、Opus 5、Opus 5.5、Fable 5、Fable 5.1、Mythos 5、Mythos 5.1 和 Mythos Preview `1000000/128000`，Claude Sonnet 5 `1000000/64000`，Claude Haiku 4.5、Claude Sonnet 4.5 `200000/64000`，DeepSeek V3.2 `163840/65536`，DeepSeek V4.1 Flash（canonical ID 为 `deepseek-flash`，兼容 `deepseek-4.1-flash`、`deepseek-v4.1-flash` 和历史名称）及 V4 Pro `1048576/393216`。数值依次表示上下文窗口和最大输出。GPT-6 Astra、GPT-6 Sol、GPT-6 Luna 和 Daybreak Blue 另外提供 `872000` 最大上下文候选。
 
-GPT-6.1 Sol 的内置默认值为 `272000/128000`，并提供 `872000` 最大上下文候选；Claude Sonnet 5.5 和 Claude Haiku 5.5 的内置默认值为 `1000000/64000`。GPT-6.1 Sol 的上下文来自 Codex 模型目录，两个 Claude 模型的上下文来自官方系统卡。这三个模型的最大输出字段采用系列建议值，拉取模型时优先使用接口返回的最大输出元数据。
+GPT-6.1 Sol 和 GPT-6.1 Terra 的内置默认值为 `272000/128000`，并提供 `872000` 最大上下文候选；GPT-6.1 Terra 另外提供 OpenAI 文档 `1050000` 上下文候选。Claude Sonnet 5.5 和 Claude Haiku 5.5 的内置默认值为 `1000000/64000`。GPT-6.1 系列模型的上下文来自 Codex 模型目录和 OpenAI 文档，两个 Claude 模型的上下文来自官方系统卡。这些模型的最大输出字段采用系列建议值或官方文档值，拉取模型时优先使用接口返回的最大输出元数据。
 
-Kimi K3 的内置默认值为 `1048576/131072`，并提供 `1048576` 最大输出候选；Kimi K2.7 Code、Kimi K2.7 Code Highspeed 和 Kimi K2.6 的内置默认值为 `262144/32768`。
+Kimi K3 和 Kimi K3.1 Pro 的内置默认值为 `1048576/131072`，并提供 `1048576` 最大输出候选；Kimi K3.1 Pro Highspeed 使用与 Kimi K3.1 Pro 相同的参数。Kimi K2.7 Code、Kimi K2.7 Code Highspeed 和 Kimi K2.6 的内置默认值为 `262144/32768`。
 
 ### 拉取模型
 
@@ -115,20 +115,17 @@ Claude 页面会写入 `settings.json` 的 `env`：
 - `CLAUDE_CODE_AUTO_COMPACT_WINDOW`（模型配置上下文窗口时写入）
 - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`（模型配置压缩阈值时写入）
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS`（模型配置最大输出时写入，最高写入 `64000`）
+- `CLAUDE_CODE_EFFORT_LEVEL`（可选）
 - `CLAUDE_CODE_ATTRIBUTION_HEADER`（可选）
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`（可选）
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`（可选）
 - `ENABLE_TOOL_SEARCH`（可选）
 
-Claude 页面还会写入 `settings.json` 顶层字段：
-
-- `effortLevel`（可选）
-
 每个 Provider 模型在 Claude 下拉框和快速切换中显示普通版和 `[1M]` 版。`[1M]` 选项实际写入 `model-id[1m]`，由用户按上游模型能力选择。
 
 Claude 使用主模型的参数更新 env。上下文窗口写入 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，压缩阈值写入 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`，最大输出写入 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。`CLAUDE_CODE_MAX_OUTPUT_TOKENS` 属于 Claude Code 客户端设置，插件将模型最大输出压到 `64000` 后写入，避免超过 Claude Code 接受的范围。模型未配置上下文窗口、压缩阈值或最大输出时，插件清理对应配置。
 
-运行设置使用“不设置 / 启用 / 禁用”或“不设置 / effort 值”选择，配置中缺少对应字段时默认选择“不设置”。`effortLevel` 支持 `low`、`medium`、`high`、`xhigh`、`max`。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
+运行设置使用“不设置 / 启用 / 禁用”或“不设置 / effort 值”选择，配置中缺少对应字段时默认选择“不设置”。`CLAUDE_CODE_EFFORT_LEVEL` 支持 `low`、`medium`、`high`、`xhigh`、`max`，写入 `env.CLAUDE_CODE_EFFORT_LEVEL`；读取时兼容旧版本写入的顶层 `effortLevel`。“沙箱环境”写入 `env.IS_SANDBOX`，启用值为 `"1"`，禁用值为 `"0"`。其他运行设置写入对应 env。插件管理的字段遵循配置所有权规则。
 
 ### Codex
 
@@ -230,7 +227,7 @@ opencode 会写入 Provider 中的全部模型 ID，模型参数按需写入。�
 | `LLM-Switch: Quick Switch Claude Model` | `llm-switch.quickSwitchClaudeModel` | 快速选择 Provider 模型并应用到 Claude。 |
 | `LLM-Switch: Quick Switch Codex Model` | `llm-switch.quickSwitchCodexModel` | 快速选择 Provider 模型并应用到 Codex。 |
 | `LLM-Switch: Quick Switch Opencode Model` | `llm-switch.quickSwitchOpencodeModel` | 快速选择 Provider 模型并应用到 opencode。 |
-| `LLM-Switch: Set Claude Effort` | `llm-switch.setClaudeEffort` | 设置 Claude `effortLevel`。 |
+| `LLM-Switch: Set Claude Effort` | `llm-switch.setClaudeEffort` | 设置 Claude `env.CLAUDE_CODE_EFFORT_LEVEL`。 |
 | `LLM-Switch: Set Codex Effort` | `llm-switch.setCodexEffort` | 设置 Codex `model_reasoning_effort`。 |
 | `LLM-Switch: Set Opencode Effort` | `llm-switch.setOpencodeEffort` | 设置 opencode 所选模型的 `options.reasoningEffort`。 |
 

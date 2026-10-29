@@ -22,7 +22,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const opencodePath = path.join(tempRoot, 'opencode.json');
     await fs.mkdir(globalStoragePath, { recursive: true });
     await Promise.all([
-      fs.writeFile(claudePath, '{}\n'),
+      fs.writeFile(claudePath, '{"effortLevel":"high"}\n'),
       fs.writeFile(codexPath, ''),
       fs.writeFile(codexAuthPath, '{}\n'),
       fs.writeFile(opencodePath, '{}\n'),
@@ -98,7 +98,8 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     const claude = JSON.parse(await fs.readFile(claudePath, 'utf8')) as Record<string, unknown>;
     const claudeEnv = claude.env as Record<string, unknown>;
     assert.equal(claude.autoCompactWindow, undefined);
-    assert.equal(claude.effortLevel, 'max');
+    assert.equal(claude.effortLevel, undefined);
+    assert.equal(claudeEnv.CLAUDE_CODE_EFFORT_LEVEL, 'max');
     assert.equal(claudeEnv.ANTHROPIC_MODEL, 'glm-5.3[1m]');
     assert.equal(claudeEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
     assert.equal(claudeEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, '80');
@@ -207,6 +208,7 @@ test('三类 Agent 按模型参数下发配置并保留用户手改值', async (
     assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1048576');
     assert.equal(claudeWithoutCompactEnv.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, undefined);
     assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, '64000');
+    assert.equal(claudeWithoutCompactEnv.CLAUDE_CODE_EFFORT_LEVEL, undefined);
     assert.equal(claudeWithoutCompact.effortLevel, undefined);
     const codexWithoutCompact = TOML.parse(await fs.readFile(codexPath, 'utf8')) as Record<string, unknown>;
     assert.equal(codexWithoutCompact.model_context_window, 1_048_576);

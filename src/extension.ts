@@ -446,7 +446,7 @@ async function setAgentEffort(context: vscode.ExtensionContext, agent: AgentName
 }
 
 async function pickClaudeEffort(current: ClaudeEffortLevel | undefined): Promise<ClaudeEffortLevel | undefined | null> {
-  return pickEffort('Claude effortLevel', CLAUDE_EFFORT_LEVELS, current);
+  return pickEffort('Claude effort (CLAUDE_CODE_EFFORT_LEVEL)', CLAUDE_EFFORT_LEVELS, current);
 }
 
 async function pickReasoningEffort(label: string, current: ReasoningEffort | undefined): Promise<ReasoningEffort | undefined | null> {

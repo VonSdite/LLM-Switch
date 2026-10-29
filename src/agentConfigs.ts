@@ -105,10 +105,12 @@ export async function saveClaudeConfig(context: vscode.ExtensionContext, provide
     delete objectValue(config.env).CLAUDE_CODE_MAX_OUTPUT_TOKENS;
   }
   if (runtimeSettings.effortLevel) {
-    desired.push(managedField(['effortLevel'], runtimeSettings.effortLevel));
+    desired.push(managedField(['env', 'CLAUDE_CODE_EFFORT_LEVEL'], runtimeSettings.effortLevel));
   } else {
-    delete config.effortLevel;
+    delete objectValue(config.env).CLAUDE_CODE_EFFORT_LEVEL;
   }
+  // 迁移旧版本写入的顶层 effortLevel。
+  delete config.effortLevel;
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_ATTRIBUTION_HEADER'], runtimeSettings.attributionHeader, '1', '0');
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'], runtimeSettings.disableNonessentialTraffic, '1', '0');
   pushClaudeModeField(desired, ['env', 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'], runtimeSettings.experimentalAgentTeams, '1', '0');
@@ -284,7 +286,9 @@ async function readClaudeState(context: vscode.ExtensionContext, providers: Prov
       autoCompactWindow: positiveIntegerOrUndefined(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW) ?? null,
       maxOutputTokens: positiveIntegerOrUndefined(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) ?? null,
       runtimeSettings: {
-        effortLevel: knownString(config.effortLevel, CLAUDE_EFFORT_LEVELS),
+        // 兼容旧版本写入的顶层 effortLevel。
+        effortLevel: knownString(env.CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_EFFORT_LEVELS)
+          ?? knownString(config.effortLevel, CLAUDE_EFFORT_LEVELS),
         autoCompactPctOverride: positiveIntegerOrUndefined(env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE),
         attributionHeader: claudeModeFromValue(env.CLAUDE_CODE_ATTRIBUTION_HEADER, '1', '0'),
         disableNonessentialTraffic: claudeModeFromValue(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, '1', '0'),

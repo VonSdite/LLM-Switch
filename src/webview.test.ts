@@ -175,6 +175,7 @@ test('Claude 页面渲染 1M 模型、运行设置和换算预览', () => {
   assert.match(harness.app.innerHTML, /CLAUDE_AUTOCOMPACT_PCT_OVERRIDE/);
   assert.match(harness.app.innerHTML, /CLAUDE_CODE_AUTO_COMPACT_WINDOW/);
   assert.match(harness.app.innerHTML, /CLAUDE_CODE_MAX_OUTPUT_TOKENS/);
+  assert.match(harness.app.innerHTML, /env\.CLAUDE_CODE_EFFORT_LEVEL/);
   assert.match(harness.app.innerHTML, /1048576/);
   assert.match(harness.app.innerHTML, /64000/);
   assert.doesNotMatch(harness.app.innerHTML, /131072/);
